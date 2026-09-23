@@ -1,0 +1,6 @@
+{
+  "name": "Q-Mold: QC Inspector & SPC Management System",
+  "description": "Aplikasi Laporan Quality Control (QC) Manufaktur Injection Molding & Stamping dengan pemantauan Cavity, SPC dimensi kritis, Pareto cacat, dan kalkulasi otomatis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

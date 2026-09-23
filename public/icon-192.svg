@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="192" height="192" rx="42" fill="url(#bgGrad)" />
+  
+  <!-- Subtle inner border -->
+  <rect x="3" y="3" width="186" height="186" rx="39" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.15" />
+
+  <!-- Clipboard / Inspection Board -->
+  <rect x="44" y="44" width="104" height="114" rx="14" fill="#ffffff" />
+  
+  <!-- Clipboard Clip -->
+  <rect x="72" y="34" width="48" height="18" rx="7" fill="#0f172a" />
+  <circle cx="96" cy="42" r="4" fill="#60a5fa" />
+
+  <!-- Mold / Cavity Grid Graphic inside clipboard -->
+  <rect x="56" y="66" width="36" height="24" rx="5" fill="#e0f2fe" />
+  <rect x="100" y="66" width="36" height="24" rx="5" fill="#e0f2fe" />
+  <rect x="56" y="96" width="36" height="24" rx="5" fill="#e0f2fe" />
+  <rect x="100" y="96" width="36" height="24" rx="5" fill="#dcfce7" />
+
+  <!-- Checkmark Badge on bottom right -->
+  <circle cx="128" cy="136" r="26" fill="url(#accentGrad)" stroke="#ffffff" stroke-width="4" />
+  <path d="M118 136 L125 143 L139 129" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
