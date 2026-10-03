@@ -14,6 +14,9 @@ import {
   Package,
   RefreshCw,
   Sparkles,
+  X,
+  Building2,
+  MapPin,
 } from 'lucide-react';
 
 interface Props {
@@ -23,7 +26,6 @@ interface Props {
 
 export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
   const [showMoreFields, setShowMoreFields] = useState(false);
-  const [seqNumber, setSeqNumber] = useState('001');
 
   const updateField = <K extends keyof HeaderMetadata>(key: K, value: HeaderMetadata[K]) => {
     onChange({
@@ -37,9 +39,17 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
   const handleAutoGenerateNumber = (
     processType = header.processType,
     dateStr = header.inspectionDate,
-    shift = header.shift,
-    seq = seqNumber
+    shift = header.shift
   ) => {
+    // Determine sequence number from existing or default to 001
+    let seq = '001';
+    if (header.reportNumber) {
+      const match = header.reportNumber.match(/-(\d{3})$/);
+      if (match) {
+        const nextNum = parseInt(match[1], 10) + 1;
+        seq = String(nextNum).padStart(3, '0');
+      }
+    }
     const autoNo = generateAutoReportNumber(processType, dateStr, shift, seq);
     onChange({
       ...header,
@@ -55,7 +65,7 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
       ...header,
       processType: newType,
       reportNumber: header.reportNumber
-        ? generateAutoReportNumber(newType, header.inspectionDate, header.shift, seqNumber)
+        ? generateAutoReportNumber(newType, header.inspectionDate, header.shift, '001')
         : '',
     });
   };
@@ -65,7 +75,7 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
       ...header,
       shift: newShift,
       reportNumber: header.reportNumber
-        ? generateAutoReportNumber(header.processType, header.inspectionDate, newShift, seqNumber)
+        ? generateAutoReportNumber(header.processType, header.inspectionDate, newShift, '001')
         : '',
     });
   };
@@ -75,7 +85,7 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
       ...header,
       inspectionDate: newDate,
       reportNumber: header.reportNumber
-        ? generateAutoReportNumber(header.processType, newDate, header.shift, seqNumber)
+        ? generateAutoReportNumber(header.processType, newDate, header.shift, '001')
         : '',
     });
   };
@@ -137,33 +147,28 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="relative flex items-center">
             <input
               type="text"
               value={header.reportNumber}
               onChange={(e) => updateField('reportNumber', e.target.value)}
               placeholder="Contoh: QC-EXT-23/09/26-1-001"
-              className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold text-slate-900 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+              className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold text-slate-900 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
             />
-            {/* Urutan Laporan */}
-            <div className="flex items-center shrink-0" title="Nomor Urut Laporan (e.g. 001, 002)">
-              <input
-                type="text"
-                maxLength={3}
-                value={seqNumber}
-                placeholder="001"
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSeqNumber(val);
-                  handleAutoGenerateNumber(header.processType, header.inspectionDate, header.shift, val);
-                }}
-                className="w-12 px-1 text-center py-2 min-h-[44px] text-xs font-mono font-bold bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 placeholder:opacity-50"
-              />
-            </div>
+            {header.reportNumber && (
+              <button
+                type="button"
+                onClick={() => updateField('reportNumber', '')}
+                className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                title="Hapus nomor laporan"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
-            <span>Format: QC-EXT-(DD/MM/YY)-(Shift)-(Urut)</span>
+            <span>Format: QC-EXT-(DD/MM/YY)-(Shift)-(Urut) · Klik "Otomatis" untuk generate</span>
           </div>
         </div>
 
@@ -211,28 +216,52 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
             <Layers className="w-3.5 h-3.5 text-blue-600" />
             Nomor SPK
           </label>
-          <input
-            type="text"
-            value={header.workOrderNumber}
-            onChange={(e) => updateField('workOrderNumber', e.target.value)}
-            placeholder="Contoh: SPK-2026-09-001"
-            className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-          />
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={header.workOrderNumber}
+              onChange={(e) => updateField('workOrderNumber', e.target.value)}
+              placeholder="Contoh: SPK-2026-09-001"
+              className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+            />
+            {header.workOrderNumber && (
+              <button
+                type="button"
+                onClick={() => updateField('workOrderNumber', '')}
+                className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                title="Hapus SPK"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Nomor LOT (sebelumnya Part Number / Kode Roll) */}
+        {/* Nomor LOT */}
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
             <Package className="w-3.5 h-3.5 text-blue-600" />
             Nomor LOT
           </label>
-          <input
-            type="text"
-            value={header.partNumber}
-            onChange={(e) => updateField('partNumber', e.target.value)}
-            placeholder={header.processType === 'EXTRUDER' ? 'Contoh: LOT-EXT-260923-01' : 'Contoh: LOT-P2-260923-01'}
-            className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-          />
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={header.partNumber}
+              onChange={(e) => updateField('partNumber', e.target.value)}
+              placeholder={header.processType === 'EXTRUDER' ? 'Contoh: LOT-EXT-260923-01' : 'Contoh: LOT-P2-260923-01'}
+              className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+            />
+            {header.partNumber && (
+              <button
+                type="button"
+                onClick={() => updateField('partNumber', '')}
+                className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                title="Hapus Nomor LOT"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Part Name */}
@@ -240,13 +269,25 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
             Nama Part / Produk
           </label>
-          <input
-            type="text"
-            value={header.partName}
-            onChange={(e) => updateField('partName', e.target.value)}
-            placeholder={header.processType === 'EXTRUDER' ? 'Contoh: Roll Sheet Clear 0.50mm x 650mm' : 'Contoh: Food Packaging Tray'}
-            className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-          />
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={header.partName}
+              onChange={(e) => updateField('partName', e.target.value)}
+              placeholder={header.processType === 'EXTRUDER' ? 'Contoh: Roll Sheet Clear 0.50mm x 650mm' : 'Contoh: Food Packaging Tray'}
+              className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+            />
+            {header.partName && (
+              <button
+                type="button"
+                onClick={() => updateField('partName', '')}
+                className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                title="Hapus nama part"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Mesin */}
@@ -306,13 +347,76 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
             <User className="w-3.5 h-3.5 text-blue-600" />
             Nama Inspector QC
           </label>
-          <input
-            type="text"
-            value={header.inspectorName}
-            onChange={(e) => updateField('inspectorName', e.target.value)}
-            placeholder="Contoh: Bambang Sudirman (QC)"
-            className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-          />
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={header.inspectorName}
+              onChange={(e) => updateField('inspectorName', e.target.value)}
+              placeholder="Contoh: Bambang Sudirman (QC)"
+              className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+            />
+            {header.inspectorName && (
+              <button
+                type="button"
+                onClick={() => updateField('inspectorName', '')}
+                className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                title="Hapus nama inspector"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tujuan Alokasi Pabrik / Produksi (Pabrik Jati & Pabrik Bolang) */}
+      <div className="mt-3.5 p-3 rounded-xl bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-slate-50 border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="p-2 rounded-lg bg-blue-600 text-white shadow-2xs">
+            <Building2 className="w-4 h-4" />
+          </span>
+          <div>
+            <span className="text-xs font-bold text-slate-900 block">
+              Tujuan Alokasi Produksi (Pabrik PT Camiloplas Jaya Makmur):
+            </span>
+            <span className="text-[11px] text-slate-500">
+              Pilih tujuan pabrik lanjutan untuk transfer raw sheet extruder
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:w-auto w-full">
+          <button
+            type="button"
+            onClick={() => updateField('destinationPlant', 'PROSES_2_JATI')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer ${
+              (header.destinationPlant || 'PROSES_2_JATI') === 'PROSES_2_JATI'
+                ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-400/30'
+                : 'bg-white text-slate-700 border border-slate-200 hover:border-blue-300'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+            <div>
+              <div>Proses 2 Jati</div>
+              <div className="text-[9.5px] opacity-80 font-normal">Pabrik Jatiuwung</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => updateField('destinationPlant', 'PROSES_2_BOLANG')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer ${
+              header.destinationPlant === 'PROSES_2_BOLANG'
+                ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/30'
+                : 'bg-white text-slate-700 border border-slate-200 hover:border-indigo-300'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
+            <div>
+              <div>Proses 2 Bolang</div>
+              <div className="text-[9.5px] opacity-80 font-normal">Pabrik Tigaraksa</div>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -338,13 +442,25 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
               <label className="block text-xs font-medium text-slate-700 mb-1.5">
                 Nama Operator Mesin
               </label>
-              <input
-                type="text"
-                value={header.operatorName}
-                onChange={(e) => updateField('operatorName', e.target.value)}
-                placeholder="Contoh: Agus Riyadi"
-                className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-              />
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={header.operatorName}
+                  onChange={(e) => updateField('operatorName', e.target.value)}
+                  placeholder="Contoh: Agus Riyadi"
+                  className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+                />
+                {header.operatorName && (
+                  <button
+                    type="button"
+                    onClick={() => updateField('operatorName', '')}
+                    className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                    title="Hapus nama operator"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Material & Grade */}
@@ -352,13 +468,25 @@ export const HeaderMetadataForm: React.FC<Props> = ({ header, onChange }) => {
               <label className="block text-xs font-medium text-slate-700 mb-1.5">
                 Material / Grade Bahan
               </label>
-              <input
-                type="text"
-                value={header.materialGrade}
-                onChange={(e) => updateField('materialGrade', e.target.value)}
-                placeholder={header.processType === 'EXTRUDER' ? 'Contoh: PET Virgin + Regrind' : 'Contoh: Roll Sheet Clear 0.50mm'}
-                className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
-              />
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={header.materialGrade}
+                  onChange={(e) => updateField('materialGrade', e.target.value)}
+                  placeholder={header.processType === 'EXTRUDER' ? 'Contoh: PET Virgin + Regrind' : 'Contoh: Roll Sheet Clear 0.50mm'}
+                  className="w-full pl-3 pr-8 py-2.5 sm:py-2 min-h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50 placeholder:font-normal"
+                />
+                {header.materialGrade && (
+                  <button
+                    type="button"
+                    onClick={() => updateField('materialGrade', '')}
+                    className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60"
+                    title="Hapus material grade"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

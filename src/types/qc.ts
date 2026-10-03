@@ -1,5 +1,7 @@
 export type ProcessType = 'EXTRUDER' | 'PROSES_2' | 'INJECTION_MOLDING' | 'STAMPING_PRESS';
 
+export type ProductionDestination = 'PROSES_2_JATI' | 'PROSES_2_BOLANG';
+
 export type ShiftType = 'SHIFT_1' | 'SHIFT_2' | 'SHIFT_3';
 
 export type InspectionStatus = 'PASS' | 'CONDITIONAL_PASS' | 'REJECT';
@@ -21,6 +23,7 @@ export interface HeaderMetadata {
   materialGrade: string;
   lotNumber: string;
   processType: ProcessType;
+  destinationPlant?: ProductionDestination;
 }
 
 export interface CavityDetail {
@@ -64,6 +67,7 @@ export interface ProductionSummary {
   rejectionThresholdFail: number; // default 3.5%
   status: InspectionStatus;
   statusReasons: string[];
+  destinationPlant?: ProductionDestination;
 }
 
 export interface DimensionSampleRow {

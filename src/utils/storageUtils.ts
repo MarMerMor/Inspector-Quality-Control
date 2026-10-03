@@ -5,7 +5,8 @@ import {
   generateAutoReportNumber,
 } from './sampleData';
 
-const STORAGE_KEY = 'QMOLD_SAVED_REPORTS_V2';
+const STORAGE_KEY = 'QMOLD_SAVED_REPORTS_V3';
+const STORAGE_INIT_KEY = 'QMOLD_REPORTS_INIT_DONE_V3';
 
 export interface SavedReportItem {
   id: string;
@@ -16,9 +17,9 @@ export interface SavedReportItem {
 }
 
 /**
- * Initializes default templates in storage if none exist
+ * Initializes default templates in storage on the very first visit only
  */
-function initializeDefaultTemplates(): SavedReportItem[] {
+export function initializeDefaultTemplates(): SavedReportItem[] {
   const extruder = createDefaultExtruderReport();
   const proses2 = createProses2Report();
 
@@ -59,6 +60,7 @@ function initializeDefaultTemplates(): SavedReportItem[] {
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    localStorage.setItem(STORAGE_INIT_KEY, 'true');
   } catch (e) {
     console.error('Failed to set initial templates in localStorage', e);
   }
@@ -68,21 +70,34 @@ function initializeDefaultTemplates(): SavedReportItem[] {
 
 /**
  * Loads all saved reports from localStorage
+ * Guarantees that deletions (including deleting everything) are never overwritten by auto-reinitialization!
  */
 export function getAllSavedReports(): SavedReportItem[] {
   try {
+    const isInit = localStorage.getItem(STORAGE_INIT_KEY);
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
+
+    // If never initialized at all in browser history:
+    if (!isInit && raw === null) {
       return initializeDefaultTemplates();
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (err) {
+        console.error('Failed to parse saved reports JSON', err);
+      }
     }
-    return initializeDefaultTemplates();
+
+    // If initialized but empty, honor the user's deletion and return empty list!
+    return [];
   } catch (e) {
     console.error('Error reading saved reports from localStorage', e);
-    return initializeDefaultTemplates();
+    return [];
   }
 }
 
@@ -122,6 +137,7 @@ export function saveReportToStorage(
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    localStorage.setItem(STORAGE_INIT_KEY, 'true');
     return { success: true, item: newItem };
   } catch (e) {
     console.error('Failed to save report to localStorage', e);
@@ -144,11 +160,33 @@ export function deleteReportFromStorage(id: string): boolean {
     const items = getAllSavedReports();
     const filtered = items.filter((i) => i.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    localStorage.setItem(STORAGE_INIT_KEY, 'true');
     return true;
   } catch (e) {
     console.error('Failed to delete report from storage', e);
     return false;
   }
+}
+
+/**
+ * Completely clears all saved reports from storage
+ */
+export function clearAllSavedReportsFromStorage(): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(STORAGE_INIT_KEY, 'true');
+    return true;
+  } catch (e) {
+    console.error('Failed to clear saved reports', e);
+    return false;
+  }
+}
+
+/**
+ * Restores factory default templates if requested
+ */
+export function restoreFactoryTemplates(): SavedReportItem[] {
+  return initializeDefaultTemplates();
 }
 
 /**
@@ -221,63 +259,4 @@ export function createDuplicateForNewInspection(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-}
-
-/**
- * Exports all saved reports to a JSON file backup
- */
-export function exportAllSavedReportsBackup(): void {
-  const items = getAllSavedReports();
-  const jsonContent = JSON.stringify(items, null, 2);
-  const blob = new Blob([jsonContent], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `QMold_All_Reports_Backup_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-/**
- * Imports reports from JSON backup string
- */
-export function importReportsFromJSON(
-  jsonString: string
-): { success: boolean; count: number; error?: string } {
-  try {
-    const parsed = JSON.parse(jsonString);
-    if (!Array.isArray(parsed)) {
-      return { success: false, count: 0, error: 'Format data JSON tidak valid (harus array).' };
-    }
-
-    const existing = getAllSavedReports();
-    const existingIds = new Set(existing.map((e) => e.id));
-
-    let addedCount = 0;
-    const merged = [...existing];
-
-    for (const item of parsed) {
-      if (item && item.report && item.report.header) {
-        if (!existingIds.has(item.id)) {
-          merged.push(item);
-          existingIds.add(item.id);
-          addedCount++;
-        } else {
-          // Update existing
-          const idx = merged.findIndex((m) => m.id === item.id);
-          if (idx !== -1) {
-            merged[idx] = item;
-            addedCount++;
-          }
-        }
-      }
-    }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    return { success: true, count: addedCount };
-  } catch (e: any) {
-    return { success: false, count: 0, error: e?.message || 'Gagal memproses file JSON.' };
-  }
 }

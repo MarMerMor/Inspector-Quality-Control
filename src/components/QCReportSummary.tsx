@@ -1,10 +1,9 @@
 import React from 'react';
-import { QCReport } from '../types/qc';
+import { QCReport, InspectionStatus } from '../types/qc';
 import {
   FileText,
   FileSpreadsheet,
   Printer,
-  Database,
   CheckCircle2,
   AlertTriangle,
   XCircle,
@@ -15,28 +14,29 @@ import {
   Copy,
   Sparkles,
 } from 'lucide-react';
-import { exportReportToCSV, exportReportToJSON } from '../utils/exportUtils';
+import { exportReportToCSV } from '../utils/exportUtils';
+import { AIExtruderDiagnosticPanel } from './AIExtruderDiagnosticPanel';
 
 interface Props {
   report: QCReport;
   onNotesChange: (notes: string, correctiveAction: string) => void;
   onApprovalChange: (approvedBy: string) => void;
-  onOpenSchemaModal: () => void;
   onPrint: () => void;
   onOpenSaveModal: () => void;
   onOpenSavedListModal: () => void;
   onDuplicateForNewShift: () => void;
+  onApplyStatus?: (status: InspectionStatus) => void;
 }
 
 export const QCReportSummary: React.FC<Props> = ({
   report,
   onNotesChange,
   onApprovalChange,
-  onOpenSchemaModal,
   onPrint,
   onOpenSaveModal,
   onOpenSavedListModal,
   onDuplicateForNewShift,
+  onApplyStatus,
 }) => {
   const getStatusIcon = () => {
     switch (report.production.status) {
@@ -50,8 +50,21 @@ export const QCReportSummary: React.FC<Props> = ({
     }
   };
 
+  const destinationLabel =
+    report.header.destinationPlant === 'PROSES_2_BOLANG'
+      ? 'Proses 2 Pabrik Bolang'
+      : 'Proses 2 Pabrik Jati';
+
   return (
     <div id="section-summary" className="space-y-4 sm:space-y-6">
+      {/* AI Extruder Diagnostic & Status Justification (Plastic Extrusion AI Model) */}
+      <AIExtruderDiagnosticPanel
+        report={report}
+        onApplyStatus={onApplyStatus}
+        onApplyNotes={(text) => onNotesChange(text, report.correctiveAction)}
+        onApplyCorrectiveAction={(text) => onNotesChange(report.notes, text)}
+      />
+
       {/* Automated Diagnostic Reasons Box */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 md:p-6">
         <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2 mb-3">
@@ -89,7 +102,7 @@ export const QCReportSummary: React.FC<Props> = ({
             <div className="text-[11px] text-slate-500 pt-1 flex items-center gap-3">
               <span>Status Output: <strong>{report.production.totalOk} Roll OK</strong></span>
               <span>·</span>
-              <span>Siap Transfer: <strong>Proses 2 (Mesin Kiefel)</strong></span>
+              <span>Siap Transfer: <strong>{destinationLabel}</strong></span>
               <span>·</span>
               <span>Total Produksi: <strong>{report.production.totalProduced.toLocaleString()} Roll</strong></span>
             </div>
@@ -113,8 +126,8 @@ export const QCReportSummary: React.FC<Props> = ({
               rows={3}
               value={report.notes}
               onChange={(e) => onNotesChange(e.target.value, report.correctiveAction)}
-              placeholder="Contoh: Tekanan oli hidrolik stabil. Terdapat sedikit flash di parting line cavity 2..."
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              placeholder="Contoh: Ketebalan dan lebar roll stabil. Tidak ada gelombang atau goresan pada permukaan sheet..."
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50"
             />
           </div>
 
@@ -126,8 +139,8 @@ export const QCReportSummary: React.FC<Props> = ({
               rows={3}
               value={report.correctiveAction}
               onChange={(e) => onNotesChange(report.notes, e.target.value)}
-              placeholder="Contoh: Menurunkan holding pressure dari 68 ke 65 MPa, meningkatkan waktu cooling 1.5 detik..."
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              placeholder="Contoh: Penyesuaian suhu barrel zona 2 dinaikkan 3°C, kecepatan tarikan roll diatur ke 12 m/min..."
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-slate-400 placeholder:opacity-50"
             />
           </div>
         </div>
@@ -206,14 +219,14 @@ export const QCReportSummary: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Action Bar (Export to PDF, CSV, Architecture) */}
+      {/* Action Bar (Export to PDF, CSV) */}
       <div className="no-print bg-slate-900 text-white rounded-xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
         <div>
           <div className="text-sm font-bold flex items-center gap-2">
-            <span>Ekspor Dokumen & Arsitektur Sistem</span>
+            <span>Ekspor Dokumen & Penyimpanan Laporan</span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Unduh laporan ke format siap cetak standar industri manufaktur atau lihat skema database
+            Unduh laporan ke format siap cetak PDF standar industri manufaktur atau ekspor lembar kerja Excel (CSV)
           </p>
         </div>
 
@@ -221,7 +234,7 @@ export const QCReportSummary: React.FC<Props> = ({
           <button
             type="button"
             onClick={onOpenSaveModal}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-xs"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-xs cursor-pointer"
           >
             <Save className="w-4 h-4" />
             Simpan Laporan
@@ -230,7 +243,7 @@ export const QCReportSummary: React.FC<Props> = ({
           <button
             type="button"
             onClick={onPrint}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-xs active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-xs active:scale-95 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             Cetak Laporan / PDF
@@ -239,28 +252,10 @@ export const QCReportSummary: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => exportReportToCSV(report)}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-xs active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-xs active:scale-95 cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" />
             Ekspor Excel (CSV)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => exportReportToJSON(report)}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            JSON
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenSchemaModal}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-xs"
-          >
-            <Database className="w-4 h-4" />
-            Skema Database & Arsitektur
           </button>
         </div>
       </div>

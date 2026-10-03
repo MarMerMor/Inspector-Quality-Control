@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { DimensionSampleRow, ProductionSummary } from '../types/qc';
+import { formatMeasurement } from '../utils/formatUtils';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -174,7 +175,7 @@ export const DashboardAnalytics: React.FC<Props> = ({
 
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 border border-blue-200">
-            Nominal: {widthThickness?.nominal.toFixed(3) || '0.500'} mm (±0.03 mm)
+            Nominal: {widthThickness ? formatMeasurement(widthThickness.nominal) : '0.5'} mm (±0.03 mm)
           </span>
           <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -188,17 +189,17 @@ export const DashboardAnalytics: React.FC<Props> = ({
         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
           <span className="text-[11px] font-medium text-slate-500 block">Tebal Rata-rata (x̄ Lebar)</span>
           <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-            {widthThickness?.mean !== null ? `${widthThickness.mean.toFixed(3)} mm` : '-'}
+            {widthThickness?.mean !== null ? `${formatMeasurement(widthThickness?.mean)} mm` : '-'}
           </div>
           <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
-            Target: {widthThickness?.nominal.toFixed(3)} mm
+            Target: {formatMeasurement(widthThickness?.nominal)} mm
           </span>
         </div>
 
         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
           <span className="text-[11px] font-medium text-slate-500 block">Gauge Band (Delta Tebal)</span>
           <div className="text-lg font-bold font-mono text-blue-600 mt-1">
-            {widthThickness?.range !== null ? `±${(widthThickness.range / 2).toFixed(3)} mm` : '-'}
+            {widthThickness?.range !== null ? `±${formatMeasurement(widthThickness.range / 2)} mm` : '-'}
           </div>
           <span className="text-[10px] text-slate-500 mt-0.5 block">
             Batas Maks: ±0.030 mm
@@ -208,7 +209,7 @@ export const DashboardAnalytics: React.FC<Props> = ({
         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
           <span className="text-[11px] font-medium text-slate-500 block">Stabilitas Panjang (Roll Run)</span>
           <div className="text-lg font-bold font-mono text-indigo-600 mt-1">
-            {lengthThickness && lengthThickness.range !== null ? `${lengthThickness.range.toFixed(3)} mm` : '-'}
+            {lengthThickness && lengthThickness.range !== null ? `${formatMeasurement(lengthThickness.range)} mm` : '-'}
           </div>
           <span className="text-[10px] text-slate-500 mt-0.5 block">
             Deviasi 0m s/d 200m
@@ -269,19 +270,19 @@ export const DashboardAnalytics: React.FC<Props> = ({
                   y={widthThickness?.upperSpecLimit ?? 0.53}
                   stroke="#ef4444"
                   strokeDasharray="4 4"
-                  label={{ value: 'USL 0.530', fill: '#ef4444', fontSize: 9 }}
+                  label={{ value: `USL ${formatMeasurement(widthThickness?.upperSpecLimit ?? 0.53)}`, fill: '#ef4444', fontSize: 9 }}
                 />
                 <ReferenceLine
                   y={widthThickness?.nominal ?? 0.5}
                   stroke="#10b981"
                   strokeWidth={1.5}
-                  label={{ value: 'Nominal 0.500', fill: '#10b981', fontSize: 9 }}
+                  label={{ value: `Nominal ${formatMeasurement(widthThickness?.nominal ?? 0.5)}`, fill: '#10b981', fontSize: 9 }}
                 />
                 <ReferenceLine
                   y={widthThickness?.lowerSpecLimit ?? 0.47}
                   stroke="#ef4444"
                   strokeDasharray="4 4"
-                  label={{ value: 'LSL 0.470', fill: '#ef4444', fontSize: 9 }}
+                  label={{ value: `LSL ${formatMeasurement(widthThickness?.lowerSpecLimit ?? 0.47)}`, fill: '#ef4444', fontSize: 9 }}
                 />
 
                 <Line
@@ -327,7 +328,7 @@ export const DashboardAnalytics: React.FC<Props> = ({
                 Grafik Simpangan Deviasi Titik Ukur (Δ to Nominal)
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Deviasi aktual dari target nominal 0.500 mm (Batas: ±0.030 mm)
+                Deviasi aktual dari target nominal {formatMeasurement(widthThickness?.nominal ?? 0.5)} mm (Batas: ±0.030 mm)
               </p>
             </div>
           </div>

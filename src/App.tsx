@@ -15,14 +15,17 @@ import { HeaderMetadataForm } from './components/HeaderMetadataForm';
 import { MoldCavityConfig } from './components/MoldCavityConfig';
 import { DefectChecklistForm } from './components/DefectChecklistForm';
 import { CriticalDimensionsTable } from './components/CriticalDimensionsTable';
+import { SmartRollMetrologyCalculator } from './components/SmartRollMetrologyCalculator';
 import { ExtruderGraphicalReport } from './components/ExtruderGraphicalReport';
 import { RollProductionForm } from './components/RollProductionForm';
 import { DashboardAnalytics } from './components/DashboardAnalytics';
 import { QCReportSummary } from './components/QCReportSummary';
-import { DatabaseSchemaModal } from './components/DatabaseSchemaModal';
 import { PrintReportView } from './components/PrintReportView';
+import { PrintPreviewModal } from './components/PrintPreviewModal';
+import { CamiloplasLogo } from './components/CamiloplasLogo';
 import { SaveReportModal } from './components/SaveReportModal';
 import { SavedReportsModal } from './components/SavedReportsModal';
+import { LoginModal } from './components/LoginModal';
 import {
   ClipboardCheck,
   BarChart3,
@@ -38,18 +41,46 @@ import {
   CheckCircle2,
   Menu,
   X,
+  LogOut,
+  User,
 } from 'lucide-react';
 import { exportReportToCSV } from './utils/exportUtils';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<{ username: string; name: string; role?: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('QMOLD_QC_AUTH_USER');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.username?.toLowerCase() === 'qc1') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading stored user', e);
+    }
+    return null;
+  });
+
   const [report, setReport] = useState<QCReport>(createBlankReport());
   const [activeTab, setActiveTab] = useState<'FORM' | 'ANALYTICS' | 'SUMMARY'>('FORM');
-  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [isSavedListModalOpen, setIsSavedListModalOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [savedReports, setSavedReports] = useState<SavedReportItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('QMOLD_QC_AUTH_USER');
+    } catch (e) {
+      console.error(e);
+    }
+    setCurrentUser(null);
+    setIsMobileMenuOpen(false);
+    showToast('Sistem QC dikunci kembali. Silakan login untuk melanjutkan.');
+  };
 
   // Smooth scroll to section helper for mobile
   const scrollToSection = (sectionId: string) => {
@@ -112,17 +143,22 @@ export default function App() {
   // Recalculate production summary automatically whenever dependencies change
   const triggerAutoEvaluation = (
     defects: DefectItem[],
-    partialProduction: Partial<ProductionSummary>,
+    currentProd: ProductionSummary,
     dimensions: DimensionSampleRow[],
-    mold = report.moldSetup
-  ) => {
-    const totalNg = defects.reduce((sum, d) => sum + d.count, 0);
-    const totalOk = partialProduction.totalOk ?? report.production.totalOk;
-    const totalRework = partialProduction.totalRework ?? report.production.totalRework;
-    const warnThresh = partialProduction.rejectionThresholdWarn ?? report.production.rejectionThresholdWarn;
-    const failThresh = partialProduction.rejectionThresholdFail ?? report.production.rejectionThresholdFail;
+    processType: QCReport['header']['processType'],
+    mold?: QCReport['moldSetup']
+  ): ProductionSummary => {
+    const isExtruder = processType === 'EXTRUDER';
+    const totalNg = isExtruder
+      ? (typeof currentProd.totalNg === 'number' && !isNaN(currentProd.totalNg) ? currentProd.totalNg : 0)
+      : defects.reduce((sum, d) => sum + d.count, 0);
 
-    const newProdSummary = evaluateProductionSummary(
+    const totalOk = typeof currentProd.totalOk === 'number' && !isNaN(currentProd.totalOk) ? currentProd.totalOk : 0;
+    const totalRework = typeof currentProd.totalRework === 'number' && !isNaN(currentProd.totalRework) ? currentProd.totalRework : 0;
+    const warnThresh = currentProd.rejectionThresholdWarn ?? 1.5;
+    const failThresh = currentProd.rejectionThresholdFail ?? 3.5;
+
+    const evaluated = evaluateProductionSummary(
       totalOk,
       totalNg,
       totalRework,
@@ -132,12 +168,29 @@ export default function App() {
       mold
     );
 
-    return newProdSummary;
+    return {
+      ...evaluated,
+      destinationPlant: currentProd.destinationPlant,
+    };
   };
 
   // Header update
   const handleHeaderChange = (header: QCReport['header']) => {
-    setReport((prev) => ({ ...prev, header, updatedAt: new Date().toISOString() }));
+    setReport((prev) => {
+      const destinationPlant = header.destinationPlant || prev.production.destinationPlant;
+      return {
+        ...prev,
+        header: {
+          ...header,
+          destinationPlant,
+        },
+        production: {
+          ...prev.production,
+          destinationPlant,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    });
   };
 
   // Mold setup update
@@ -147,6 +200,7 @@ export default function App() {
         prev.defects,
         prev.production,
         prev.criticalDimensions,
+        prev.header.processType,
         moldSetup
       );
       return {
@@ -165,6 +219,7 @@ export default function App() {
         defects,
         prev.production,
         prev.criticalDimensions,
+        prev.header.processType,
         prev.moldSetup
       );
       return {
@@ -176,18 +231,34 @@ export default function App() {
     });
   };
 
-  // Production quantities change
+  // Production quantities change (Roll OK, Roll Hold Reject, Roll Rework)
   const handleProductionChange = (partial: Partial<ProductionSummary>) => {
     setReport((prev) => {
+      const mergedProd: ProductionSummary = {
+        ...prev.production,
+        ...partial,
+      };
       const updatedProduction = triggerAutoEvaluation(
         prev.defects,
-        partial,
+        mergedProd,
         prev.criticalDimensions,
+        prev.header.processType,
         prev.moldSetup
       );
+
+      // Keep header.destinationPlant and production.destinationPlant in sync
+      const targetDest = partial.destinationPlant || prev.header.destinationPlant;
+
       return {
         ...prev,
-        production: updatedProduction,
+        header: {
+          ...prev.header,
+          destinationPlant: targetDest,
+        },
+        production: {
+          ...updatedProduction,
+          destinationPlant: targetDest,
+        },
         updatedAt: new Date().toISOString(),
       };
     });
@@ -200,6 +271,7 @@ export default function App() {
         prev.defects,
         prev.production,
         criticalDimensions,
+        prev.header.processType,
         prev.moldSetup
       );
       return {
@@ -209,6 +281,23 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       };
     });
+  };
+
+  // Apply AI status recommendation
+  const handleApplyStatus = (status: QCReport['production']['status']) => {
+    setReport((prev) => ({
+      ...prev,
+      production: {
+        ...prev.production,
+        status,
+        statusReasons: [
+          ...prev.production.statusReasons,
+          `Status disetujui & diterapkan dari rekomendasi AI Inspector Quality: ${status}`,
+        ],
+      },
+      updatedAt: new Date().toISOString(),
+    }));
+    showToast(`Status laporan diperbarui menjadi ${status} sesuai rekomendasi AI.`);
   };
 
   // Notes & corrective action change
@@ -251,31 +340,42 @@ export default function App() {
   };
 
   const handlePrint = () => {
-    window.print();
+    setIsPrintPreviewOpen(true);
   };
 
+  // If not logged in, render the clean unblurred Login Screen directly
+  if (!currentUser) {
+    return (
+      <LoginModal
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          showToast(`Login berhasil! Selamat bertugas, ${user.name}.`);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 pb-28 sm:pb-16">
-      {/* Top Application Navbar */}
+    <>
+      <div className="no-print min-h-screen bg-slate-100/70 text-slate-900 pb-28 sm:pb-16">
+        {/* Top Application Navbar */}
       <header className="no-print sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
-            {/* Brand Logo & Title */}
+            {/* Brand Logo & Title: PT Camiloplas Jaya Makmur - Inspector Quality */}
             <div className="flex items-center gap-2.5 sm:gap-3">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-xs shrink-0">
-                <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
+              <CamiloplasLogo size="md" showText={false} />
               <div>
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">
-                    QC-SYSTEM
+                    Inspector Quality
                   </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase">
-                    QC Mobile
+                  <span className="text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase tracking-wider">
+                    QC Extruder
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-500 hidden sm:block">
-                  Laporan Kualitas Extruder & Proses 2
+                <div className="text-[10.5px] sm:text-[11px] font-semibold text-blue-800/90 truncate max-w-[190px] sm:max-w-none">
+                  PT CAMILOPLAS JAYA MAKMUR · Pabrik Jati & Bolang
                 </div>
               </div>
             </div>
@@ -368,27 +468,49 @@ export default function App() {
                 <span className="hidden sm:inline">Excel</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsSchemaModalOpen(true)}
-                className="hidden md:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors"
-                title="Lihat Arsitektur & Skema Database"
-              >
-                <Database className="w-4 h-4 text-slate-500" />
-                <span className="hidden lg:inline">Skema DB</span>
-              </button>
+              {/* User Account / Session & Logout Button */}
+              {currentUser && (
+                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-slate-500 font-medium">QC:</span>
+                    <span className="font-bold text-blue-900 font-mono">{currentUser.username}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                    title="Kunci & Keluar Sistem"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Kunci</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Mobile Header Quick Buttons */}
-            <div className="flex sm:hidden items-center gap-2">
+            <div className="flex sm:hidden items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setIsSaveModalOpen(true)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-2xs active:scale-95"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-2xs active:scale-95"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Simpan</span>
               </button>
+
+              {currentUser && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg"
+                  title="Kunci Sistem"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 type="button"
@@ -499,6 +621,13 @@ export default function App() {
           <div className="sm:hidden mb-4 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
+              onClick={() => scrollToSection('section-roll-calculator')}
+              className="shrink-0 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold active:scale-95 shadow-2xs"
+            >
+              🧮 Hitung Panjang Roll (Auto)
+            </button>
+            <button
+              type="button"
               onClick={() => scrollToSection('section-dimensions')}
               className="shrink-0 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 active:bg-blue-50 active:text-blue-700 shadow-2xs"
             >
@@ -535,6 +664,14 @@ export default function App() {
                   <RollProductionForm
                     production={report.production}
                     onChange={handleProductionChange}
+                  />
+                </div>
+
+                {/* 2b. Smart Automated Roll Metrology & Length Calculator */}
+                <div id="section-roll-calculator">
+                  <SmartRollMetrologyCalculator
+                    dimensions={report.criticalDimensions}
+                    defaultRollWeightKg={100}
                   />
                 </div>
 
@@ -589,11 +726,11 @@ export default function App() {
                 report={report}
                 onNotesChange={handleNotesChange}
                 onApprovalChange={handleApprovalChange}
-                onOpenSchemaModal={() => setIsSchemaModalOpen(true)}
                 onPrint={handlePrint}
                 onOpenSaveModal={() => setIsSaveModalOpen(true)}
                 onOpenSavedListModal={() => setIsSavedListModalOpen(true)}
                 onDuplicateForNewShift={handleDuplicateCurrentForNewShift}
+                onApplyStatus={handleApplyStatus}
               />
             </div>
           </div>
@@ -646,7 +783,6 @@ export default function App() {
               report={report}
               onNotesChange={handleNotesChange}
               onApprovalChange={handleApprovalChange}
-              onOpenSchemaModal={() => setIsSchemaModalOpen(true)}
               onPrint={handlePrint}
               onOpenSaveModal={() => setIsSaveModalOpen(true)}
               onOpenSavedListModal={() => setIsSavedListModalOpen(true)}
@@ -782,6 +918,33 @@ export default function App() {
               </button>
             </div>
 
+            {/* User Session Info in Drawer */}
+            {currentUser && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    QC
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Petugas: {currentUser.username}</div>
+                    <div className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Sesi Login Aktif
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg shadow-2xs"
+                  title="Kunci & Keluar Sistem"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Kunci</span>
+                </button>
+              </div>
+            )}
+
             {/* Presets */}
             <div>
               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -865,77 +1028,62 @@ export default function App() {
                   </div>
                 </div>
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  setIsSchemaModalOpen(true);
-                }}
-                className="w-full flex items-center gap-3 p-3 text-left rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700"
-              >
-                <Database className="w-4 h-4 text-slate-600 shrink-0" />
-                <div>
-                  <div>Arsitektur & Skema Database</div>
-                  <div className="text-[10px] text-slate-500 font-normal">
-                    Dokumentasi relasional SQL & JSON payload
-                  </div>
-                </div>
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Official Print View (Only rendered during physical/PDF printing) */}
-      <PrintReportView report={report} />
+        {/* Save Report & Template Modal */}
+        <SaveReportModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          report={report}
+          existingSavedItem={savedReports.find((s) => s.id === report.id)}
+          onSavedSuccess={handleSaveSuccess}
+        />
 
-      {/* Database Schema & System Architecture Modal */}
-      <DatabaseSchemaModal
-        isOpen={isSchemaModalOpen}
-        onClose={() => setIsSchemaModalOpen(false)}
-      />
+        {/* Saved Reports & Master Templates Library Modal */}
+        <SavedReportsModal
+          isOpen={isSavedListModalOpen}
+          onClose={() => setIsSavedListModalOpen(false)}
+          savedItems={savedReports}
+          currentReportId={report.id}
+          onLoadReport={handleLoadReport}
+          onUseAsTemplate={handleUseAsTemplate}
+          onRefreshSavedList={refreshSavedList}
+          onQuickPrint={(rep) => {
+            setReport(rep);
+            setIsPrintPreviewOpen(true);
+          }}
+        />
 
-      {/* Save Report & Template Modal */}
-      <SaveReportModal
-        isOpen={isSaveModalOpen}
-        onClose={() => setIsSaveModalOpen(false)}
-        report={report}
-        existingSavedItem={savedReports.find((s) => s.id === report.id)}
-        onSavedSuccess={handleSaveSuccess}
-      />
+        {/* Official Interactive Print Preview Modal */}
+        <PrintPreviewModal
+          isOpen={isPrintPreviewOpen}
+          onClose={() => setIsPrintPreviewOpen(false)}
+          report={report}
+        />
 
-      {/* Saved Reports & Master Templates Library Modal */}
-      <SavedReportsModal
-        isOpen={isSavedListModalOpen}
-        onClose={() => setIsSavedListModalOpen(false)}
-        savedItems={savedReports}
-        currentReportId={report.id}
-        onLoadReport={handleLoadReport}
-        onUseAsTemplate={handleUseAsTemplate}
-        onRefreshSavedList={refreshSavedList}
-        onQuickPrint={(rep) => {
-          setReport(rep);
-          setTimeout(() => window.print(), 200);
-        }}
-      />
-
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="no-print fixed bottom-20 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto z-50 max-w-md bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-800 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-            <CheckCircle2 className="w-5 h-5" />
+        {/* Floating Toast Notification */}
+        {toastMessage && (
+          <div className="no-print fixed bottom-20 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto z-50 max-w-md bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-800 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <p className="text-xs font-medium text-slate-200 flex-1">{toastMessage}</p>
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              className="text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
-          <p className="text-xs font-medium text-slate-200 flex-1">{toastMessage}</p>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-white text-xs font-bold"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+
+      {/* Official Print View (Background container when preview modal is not active) */}
+      {!isPrintPreviewOpen && <PrintReportView report={report} />}
+    </>
   );
 }

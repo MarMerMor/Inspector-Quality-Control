@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { DimensionSampleRow } from '../types/qc';
 import { calculateDimensionStats } from '../utils/calculations';
+import { formatMeasurement } from '../utils/formatUtils';
 import { Ruler, Plus, Trash2, Check, AlertTriangle, Smartphone, Table as TableIcon, Zap } from 'lucide-react';
+import { CleanNumberInput } from './common/CleanNumberInput';
+import { CleanSampleInput } from './common/CleanSampleInput';
 
 interface Props {
   dimensions: DimensionSampleRow[];
@@ -11,6 +14,32 @@ interface Props {
 export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange }) => {
   // Mobile card view vs desktop table view toggle
   const [viewMode, setViewMode] = useState<'CARD' | 'TABLE'>('CARD');
+
+  // Direct numeric sample change
+  const handleSampleDirectChange = (
+    dimId: string,
+    sampleIndex: number,
+    numVal: number | null
+  ) => {
+    const updated = dimensions.map((dim) => {
+      if (dim.id === dimId) {
+        const newSamples = [...dim.samples];
+        newSamples[sampleIndex] = numVal;
+        const stats = calculateDimensionStats(
+          newSamples,
+          dim.upperSpecLimit,
+          dim.lowerSpecLimit
+        );
+        return {
+          ...dim,
+          samples: newSamples,
+          ...stats,
+        };
+      }
+      return dim;
+    });
+    onChange(updated);
+  };
 
   // Quick fill all 5 samples with nominal value
   const handleQuickFillNominal = (dimId: string) => {
@@ -42,7 +71,8 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
     const updated = dimensions.map((dim) => {
       if (dim.id === dimId) {
         const newSamples = [...dim.samples];
-        newSamples[sampleIndex] = valueStr === '' ? null : parseFloat(valueStr);
+        const parsed = parseFloat(valueStr);
+        newSamples[sampleIndex] = valueStr === '' || isNaN(parsed) ? null : parsed;
         const stats = calculateDimensionStats(
           newSamples,
           dim.upperSpecLimit,
@@ -155,25 +185,6 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
         outOfSpecIndices: [],
         category: 'ROLL_WIDTH',
       },
-      {
-        id: 'DIM_EXT_LENGTH',
-        parameterName: 'Panjang Rollsheet (Roll Length)',
-        toolUsed: 'Meteran Gulung / Counter',
-        nominal: 200.0,
-        upperSpecLimit: 205.0,
-        lowerSpecLimit: 198.0,
-        unit: 'm',
-        sampleLabels: ['Panjang Roll', '-', '-', '-', '-'],
-        samples: [200.5, null, null, null, null],
-        mean: null,
-        min: null,
-        max: null,
-        range: null,
-        stdDev: null,
-        isAllInSpec: true,
-        outOfSpecIndices: [],
-        category: 'ROLL_LENGTH',
-      },
     ];
 
     const processed = extDims.map((dim) => {
@@ -251,18 +262,18 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
     const newId = `DIM_${Date.now().toString().slice(-4)}`;
     const newRow: DimensionSampleRow = {
       id: newId,
-      parameterName: 'Pengukuran Baru',
+      parameterName: '',
       toolUsed: 'Micrometer',
-      nominal: 10.0,
-      upperSpecLimit: 10.1,
-      lowerSpecLimit: 9.9,
+      nominal: 0,
+      upperSpecLimit: 0,
+      lowerSpecLimit: 0,
       unit: 'mm',
-      samples: [10.0, 10.0, 10.0, 10.0, 10.0],
-      mean: 10.0,
-      min: 10.0,
-      max: 10.0,
-      range: 0,
-      stdDev: 0,
+      samples: [null, null, null, null, null],
+      mean: null,
+      min: null,
+      max: null,
+      range: null,
+      stdDev: null,
       isAllInSpec: true,
       outOfSpecIndices: [],
     };
@@ -434,43 +445,31 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
                 <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-xs mb-3.5 border border-slate-200/80">
                   <div>
                     <span className="text-[11px] text-slate-500 block font-medium">Nominal</span>
-                    <input
-                      type="number"
-                      step="0.001"
-                      inputMode="decimal"
+                    <CleanNumberInput
                       value={dim.nominal}
-                      onChange={(e) =>
-                        handleLimitChange(dim.id, 'nominal', parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full font-mono font-bold text-slate-900 bg-white border border-slate-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5"
+                      onChangeValue={(val) => handleLimitChange(dim.id, 'nominal', val)}
+                      placeholder="0.000"
+                      className="w-full font-mono font-bold text-slate-900 bg-white border border-slate-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
 
                   <div>
                     <span className="text-[11px] text-rose-600 block font-bold">LSL (Min)</span>
-                    <input
-                      type="number"
-                      step="0.001"
-                      inputMode="decimal"
+                    <CleanNumberInput
                       value={dim.lowerSpecLimit}
-                      onChange={(e) =>
-                        handleLimitChange(dim.id, 'lowerSpecLimit', parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full font-mono font-bold text-rose-800 bg-rose-50/50 border border-rose-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5"
+                      onChangeValue={(val) => handleLimitChange(dim.id, 'lowerSpecLimit', val)}
+                      placeholder="0.000"
+                      className="w-full font-mono font-bold text-rose-800 bg-rose-50/50 border border-rose-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
 
                   <div>
                     <span className="text-[11px] text-rose-600 block font-bold">USL (Max)</span>
-                    <input
-                      type="number"
-                      step="0.001"
-                      inputMode="decimal"
+                    <CleanNumberInput
                       value={dim.upperSpecLimit}
-                      onChange={(e) =>
-                        handleLimitChange(dim.id, 'upperSpecLimit', parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full font-mono font-bold text-rose-800 bg-rose-50/50 border border-rose-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5"
+                      onChangeValue={(val) => handleLimitChange(dim.id, 'upperSpecLimit', val)}
+                      placeholder="0.000"
+                      className="w-full font-mono font-bold text-rose-800 bg-rose-50/50 border border-rose-200 rounded-lg px-2 py-1 text-center min-h-[34px] mt-0.5 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
                 </div>
@@ -484,7 +483,7 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
                     <button
                       type="button"
                       onClick={() => handleQuickFillNominal(dim.id)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 active:scale-95"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 active:scale-95 cursor-pointer"
                     >
                       <Zap className="w-3 h-3 text-amber-500" />
                       <span>Isi Semua ({dim.nominal})</span>
@@ -503,13 +502,10 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
                           >
                             {pointLabel}
                           </span>
-                          <input
-                            type="number"
-                            step="0.001"
-                            inputMode="decimal"
-                            value={val ?? ''}
+                          <CleanSampleInput
+                            value={val}
+                            onChangeValue={(numVal) => handleSampleDirectChange(dim.id, sampleIdx, numVal)}
                             placeholder="-"
-                            onChange={(e) => handleSampleChange(dim.id, sampleIdx, e.target.value)}
                             className={`w-full min-h-[44px] text-center font-mono text-xs sm:text-sm font-bold rounded-xl border-2 transition-all ${
                               isOos
                                 ? 'bg-rose-100 text-rose-950 border-rose-500 ring-2 ring-rose-300/60'
@@ -530,19 +526,19 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
                     <div>
                       <span className="text-slate-400 text-[11px]">Mean (x̄): </span>
                       <span className="font-mono font-bold text-slate-800">
-                        {dim.mean !== null ? dim.mean.toFixed(3) : '-'} {dim.unit}
+                        {dim.mean !== null ? formatMeasurement(dim.mean) : '-'} {dim.unit}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[11px]">Range (R): </span>
                       <span className="font-mono font-bold text-slate-800">
-                        {dim.range !== null ? dim.range.toFixed(3) : '-'} {dim.unit}
+                        {dim.range !== null ? formatMeasurement(dim.range) : '-'} {dim.unit}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-[11px] font-mono text-slate-500">
-                    Tol: {dim.lowerSpecLimit.toFixed(3)} - {dim.upperSpecLimit.toFixed(3)}
+                    Tol: {formatMeasurement(dim.lowerSpecLimit)} - {formatMeasurement(dim.upperSpecLimit)}
                   </div>
                 </div>
               </div>
@@ -604,43 +600,31 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
 
                     {/* Nominal */}
                     <td className="py-2 px-1 text-center">
-                      <input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
+                      <CleanNumberInput
                         value={dim.nominal}
-                        onChange={(e) =>
-                          handleLimitChange(dim.id, 'nominal', parseFloat(e.target.value) || 0)
-                        }
-                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        onChangeValue={(val) => handleLimitChange(dim.id, 'nominal', val)}
+                        placeholder="0.00"
+                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-300"
                       />
                     </td>
 
                     {/* LSL */}
                     <td className="py-2 px-1 text-center">
-                      <input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
+                      <CleanNumberInput
                         value={dim.lowerSpecLimit}
-                        onChange={(e) =>
-                          handleLimitChange(dim.id, 'lowerSpecLimit', parseFloat(e.target.value) || 0)
-                        }
-                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-rose-50/50 border border-rose-200 rounded text-rose-800 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500"
+                        onChangeValue={(val) => handleLimitChange(dim.id, 'lowerSpecLimit', val)}
+                        placeholder="0.00"
+                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-rose-50/50 border border-rose-200 rounded text-rose-800 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-300"
                       />
                     </td>
 
                     {/* USL */}
                     <td className="py-2 px-1 text-center">
-                      <input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
+                      <CleanNumberInput
                         value={dim.upperSpecLimit}
-                        onChange={(e) =>
-                          handleLimitChange(dim.id, 'upperSpecLimit', parseFloat(e.target.value) || 0)
-                        }
-                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-rose-50/50 border border-rose-200 rounded text-rose-800 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500"
+                        onChangeValue={(val) => handleLimitChange(dim.id, 'upperSpecLimit', val)}
+                        placeholder="0.00"
+                        className="w-16 px-1 py-1 text-center font-mono text-xs bg-rose-50/50 border border-rose-200 rounded text-rose-800 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-300"
                       />
                     </td>
 
@@ -649,13 +633,10 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
                       const isOos = dim.outOfSpecIndices.includes(sampleIdx);
                       return (
                         <td key={sampleIdx} className="py-2 px-1 text-center">
-                          <input
-                            type="number"
-                            step="0.01"
-                            inputMode="decimal"
-                            value={val ?? ''}
+                          <CleanSampleInput
+                            value={val}
+                            onChangeValue={(numVal) => handleSampleDirectChange(dim.id, sampleIdx, numVal)}
                             placeholder="-"
-                            onChange={(e) => handleSampleChange(dim.id, sampleIdx, e.target.value)}
                             className={`w-16 px-1 py-1 text-center font-mono text-xs rounded border transition-colors ${
                               isOos
                                 ? 'bg-rose-100 text-rose-900 border-rose-400 font-bold'
@@ -670,12 +651,12 @@ export const CriticalDimensionsTable: React.FC<Props> = ({ dimensions, onChange 
 
                     {/* Mean */}
                     <td className="py-2 px-2 text-center font-mono font-bold text-slate-800 bg-slate-50/50">
-                      {dim.mean !== null ? dim.mean.toFixed(2) : '-'}
+                      {dim.mean !== null ? formatMeasurement(dim.mean) : '-'}
                     </td>
 
                     {/* Range */}
                     <td className="py-2 px-2 text-center font-mono text-slate-600 bg-slate-50/50">
-                      {dim.range !== null ? dim.range.toFixed(2) : '-'}
+                      {dim.range !== null ? formatMeasurement(dim.range) : '-'}
                     </td>
 
                     {/* Status Badge */}

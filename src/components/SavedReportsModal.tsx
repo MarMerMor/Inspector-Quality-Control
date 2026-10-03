@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { QCReport, ShiftType } from '../types/qc';
 import {
   SavedReportItem,
   deleteReportFromStorage,
-  createDuplicateForNewInspection,
-  exportAllSavedReportsBackup,
-  importReportsFromJSON,
+  clearAllSavedReportsFromStorage,
+  restoreFactoryTemplates,
 } from '../utils/storageUtils';
 import { exportReportToCSV } from '../utils/exportUtils';
 import {
@@ -14,20 +13,17 @@ import {
   Copy,
   FolderOpen,
   Trash2,
-  Download,
-  Upload,
   Sparkles,
   CheckCircle2,
-  AlertTriangle,
-  XCircle,
   FileSpreadsheet,
   Printer,
   Layers,
-  ArrowRight,
   ShieldCheck,
   Calendar,
   Clock,
   Wrench,
+  RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Props {
@@ -54,8 +50,9 @@ export const SavedReportsModal: React.FC<Props> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'TEMPLATES' | 'EXTRUDER' | 'PROSES_2'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PASS' | 'CONDITIONAL_PASS' | 'REJECT'>('ALL');
-  const [importNotification, setImportNotification] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [deleteToast, setDeleteToast] = useState<string | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState(false);
 
   const filteredItems = useMemo(() => {
     return savedItems.filter((item) => {
@@ -85,33 +82,33 @@ export const SavedReportsModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Hapus laporan/template "${name}" dari penyimpanan lokal?`)) {
-      deleteReportFromStorage(id);
-      onRefreshSavedList();
-    }
+  const handleDeleteRequest = (id: string, name: string) => {
+    setItemToDelete({ id, name });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleConfirmDelete = () => {
+    if (!itemToDelete) return;
+    const targetName = itemToDelete.name;
+    deleteReportFromStorage(itemToDelete.id);
+    setItemToDelete(null);
+    onRefreshSavedList();
+    setDeleteToast(`Laporan/template "${targetName}" berhasil dihapus permanen dari penyimpanan.`);
+    setTimeout(() => setDeleteToast(null), 4000);
+  };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        const res = importReportsFromJSON(content);
-        if (res.success) {
-          setImportNotification(`Berhasil mengimpor ${res.count} laporan/template.`);
-          onRefreshSavedList();
-          setTimeout(() => setImportNotification(null), 4000);
-        } else {
-          alert(res.error || 'Gagal mengimpor file.');
-        }
-      }
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleConfirmClearAll = () => {
+    clearAllSavedReportsFromStorage();
+    setIsConfirmClearAllOpen(false);
+    onRefreshSavedList();
+    setDeleteToast('Semua laporan berhasil dikosongkan dari penyimpanan.');
+    setTimeout(() => setDeleteToast(null), 4000);
+  };
+
+  const handleRestoreDefaults = () => {
+    restoreFactoryTemplates();
+    onRefreshSavedList();
+    setDeleteToast('Template master standar berhasil dimuat ulang.');
+    setTimeout(() => setDeleteToast(null), 4000);
   };
 
   return (
@@ -137,54 +134,49 @@ export const SavedReportsModal: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={exportAllSavedReportsBackup}
-              title="Cadangkan Semua Laporan (Download JSON)"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-400" />
-              Backup Semua
-            </button>
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Impor Backup JSON"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5 text-emerald-400" />
-              Impor JSON
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".json"
-              className="hidden"
-            />
+            {savedItems.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setIsConfirmClearAllOpen(true)}
+                title="Hapus semua laporan tersimpan"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 rounded-lg border border-rose-800/80 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>Hapus Semua</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRestoreDefaults}
+                title="Muat ulang template standar bawaan pabrik"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-950/60 hover:bg-blue-900/80 text-blue-200 rounded-lg border border-blue-800/80 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
+                <span>Muat Template Master</span>
+              </button>
+            )}
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-2"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Notification Banner */}
-        {importNotification && (
-          <div className="bg-emerald-50 text-emerald-800 text-xs px-6 py-2.5 flex items-center justify-between border-b border-emerald-200 font-medium">
+        {/* Notification Banners */}
+        {deleteToast && (
+          <div className="bg-blue-50 text-blue-900 text-xs px-6 py-2.5 flex items-center justify-between border-b border-blue-200 font-medium animate-fadeIn">
             <span className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              {importNotification}
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+              {deleteToast}
             </span>
             <button
               type="button"
-              onClick={() => setImportNotification(null)}
-              className="text-emerald-700 hover:text-emerald-950 font-bold"
+              onClick={() => setDeleteToast(null)}
+              className="text-blue-700 hover:text-blue-950 font-bold ml-2"
             >
               ✕
             </button>
@@ -314,12 +306,22 @@ export const SavedReportsModal: React.FC<Props> = ({
           {filteredItems.length === 0 ? (
             <div className="text-center py-12 px-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
               <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-sm font-bold text-slate-700">Tidak ada laporan yang sesuai</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+              <h3 className="text-sm font-bold text-slate-700">Tidak ada laporan yang tersimpan</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-3">
                 {searchQuery
                   ? 'Coba gunakan kata kunci pencarian yang lain atau reset filter.'
-                  : 'Belum ada laporan tersimpan. Simpan laporan aktif untuk menggunakannya kembali.'}
+                  : 'Penyimpanan lokal bersih. Anda dapat menyimpan laporan baru atau memuat template master standar pabrik.'}
               </p>
+              {!searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleRestoreDefaults}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-200 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Muat Template Master (Extruder & Proses 2)</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3.5">
@@ -488,7 +490,7 @@ export const SavedReportsModal: React.FC<Props> = ({
                         {/* Delete */}
                         <button
                           type="button"
-                          onClick={() => handleDelete(item.id, item.templateLabel || rep.header.reportNumber)}
+                          onClick={() => handleDeleteRequest(item.id, item.templateLabel || rep.header.reportNumber)}
                           className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
                           title="Hapus dari penyimpanan"
                         >
@@ -515,21 +517,101 @@ export const SavedReportsModal: React.FC<Props> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={exportAllSavedReportsBackup}
-              className="sm:hidden px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium"
-            >
-              Backup JSON
-            </button>
-            <button
-              type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-colors cursor-pointer"
             >
               Tutup
             </button>
           </div>
         </div>
       </div>
+
+      {/* IN-APP CONFIRM CLEAR ALL DIALOG */}
+      {isConfirmClearAllOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-rose-300 max-w-md w-full p-5 sm:p-6 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-xl shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Kosongkan Semua Laporan Tersimpan?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus <strong>semua ({savedItems.length}) laporan dan template</strong> dari penyimpanan browser ini?
+                </p>
+                <p className="text-[11px] text-rose-600 mt-2 font-medium bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+                  ⚠️ Seluruh data tersimpan akan dikosongkan permanen. Laporan tidak akan muncul lagi kecuali Anda menyimpannya kembali atau memuat template master.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsConfirmClearAllOpen(false)}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearAll}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-lg shadow-sm transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Kosongkan Semua</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IN-APP CONFIRM DELETE INDIVIDUAL DIALOG */}
+      {itemToDelete && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-rose-200 max-w-md w-full p-5 sm:p-6 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-xl shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Konfirmasi Hapus Laporan
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus data tersimpan ini secara permanen?
+                </p>
+                <div className="mt-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200 font-mono text-xs font-semibold text-slate-800 break-all">
+                  {itemToDelete.name}
+                </div>
+                <p className="text-[11px] text-rose-600 mt-2 font-medium">
+                  ⚠️ Tindakan ini tidak dapat dibatalkan. Data akan dihapus dari penyimpanan browser lokal.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setItemToDelete(null)}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-lg shadow-sm transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus Sekarang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

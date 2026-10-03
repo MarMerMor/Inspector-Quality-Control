@@ -1,32 +1,54 @@
 import React from 'react';
-import { ProductionSummary } from '../types/qc';
-import { CheckCircle2, XCircle, AlertTriangle, Layers, ArrowRight, Scale, RotateCcw } from 'lucide-react';
+import { ProductionSummary, ProductionDestination } from '../types/qc';
+import { CheckCircle2, XCircle, AlertTriangle, Layers, ArrowRight, RotateCcw, MapPin, Building2 } from 'lucide-react';
+import { CleanNumberInput } from './common/CleanNumberInput';
 
 interface Props {
   production: ProductionSummary;
   totalRollWeightKg?: number;
+  destinationPlant?: ProductionDestination;
+  onDestinationChange?: (destination: ProductionDestination) => void;
   onChange: (updated: Partial<ProductionSummary>) => void;
 }
 
 export const RollProductionForm: React.FC<Props> = ({
   production,
   totalRollWeightKg = 120,
+  destinationPlant = 'PROSES_2_JATI',
+  onDestinationChange,
   onChange,
 }) => {
   const handleOkChange = (val: number) => {
-    onChange({ totalOk: Math.max(0, val) });
+    const safe = Math.max(0, isNaN(val) ? 0 : val);
+    onChange({ totalOk: safe });
   };
 
   const handleNgChange = (val: number) => {
-    onChange({ totalNg: Math.max(0, val) });
+    const safe = Math.max(0, isNaN(val) ? 0 : val);
+    onChange({ totalNg: safe });
   };
 
   const handleReworkChange = (val: number) => {
-    onChange({ totalRework: Math.max(0, val) });
+    const safe = Math.max(0, isNaN(val) ? 0 : val);
+    onChange({ totalRework: safe });
   };
 
-  const totalProduced = production.totalOk + production.totalNg + production.totalRework;
-  const yieldPct = totalProduced > 0 ? ((production.totalOk / totalProduced) * 100).toFixed(1) : '100.0';
+  const handleDestinationSelect = (dest: ProductionDestination) => {
+    onChange({ destinationPlant: dest });
+    if (onDestinationChange) {
+      onDestinationChange(dest);
+    }
+  };
+
+  const currentDest: ProductionDestination =
+    production.destinationPlant || destinationPlant || 'PROSES_2_JATI';
+
+  const currentOk = typeof production.totalOk === 'number' && !isNaN(production.totalOk) ? production.totalOk : 0;
+  const currentNg = typeof production.totalNg === 'number' && !isNaN(production.totalNg) ? production.totalNg : 0;
+  const currentRework = typeof production.totalRework === 'number' && !isNaN(production.totalRework) ? production.totalRework : 0;
+
+  const totalProduced = currentOk + currentNg + currentRework;
+  const yieldPct = totalProduced > 0 ? ((currentOk / totalProduced) * 100).toFixed(1) : '100.0';
 
   return (
     <div id="section-roll-production" className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 mb-6">
@@ -38,23 +60,48 @@ export const RollProductionForm: React.FC<Props> = ({
             </span>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                Catatan Hasil Produksi (Extruder)
+                Pencatatan Output Roll Extruder
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Pencatatan kuantitas roll hasil ekstrusi sebelum ditransfer ke Proses 2
+                Kuantitas roll sheet hasil ekstrusi PT Camiloplas Jaya Makmur
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Plant destination & Yield indicator */}
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
             Yield Lolos: {yieldPct}%
           </span>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-            <span>Transfer ke Proses 2</span>
-            <ArrowRight className="w-3 h-3" />
-          </span>
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs">
+            <span className="text-[11px] text-slate-500 font-semibold px-1.5 flex items-center gap-1">
+              <Building2 className="w-3.5 h-3.5 text-blue-600" />
+              Tujuan:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleDestinationSelect('PROSES_2_JATI')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                currentDest === 'PROSES_2_JATI'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-700 hover:text-slate-900'
+              }`}
+            >
+              Proses 2 Jati
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDestinationSelect('PROSES_2_BOLANG')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                currentDest === 'PROSES_2_BOLANG'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-700 hover:text-slate-900'
+              }`}
+            >
+              Proses 2 Bolang
+            </button>
+          </div>
         </div>
       </div>
 
@@ -68,39 +115,51 @@ export const RollProductionForm: React.FC<Props> = ({
               Roll Lolos (OK)
             </span>
             <span className="text-[11px] font-medium text-emerald-600 bg-emerald-100/60 px-2 py-0.5 rounded-full">
-              Siap Proses 2
+              Siap {currentDest === 'PROSES_2_JATI' ? 'Pabrik Jati' : 'Pabrik Bolang'}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="0"
-              value={production.totalOk === 0 ? '' : production.totalOk}
+            <CleanNumberInput
+              value={production.totalOk}
+              onChangeValue={handleOkChange}
+              allowDecimals={false}
+              min={0}
               placeholder="0"
-              onChange={(e) => handleOkChange(parseInt(e.target.value, 10) || 0)}
-              className="w-full text-2xl font-black font-mono text-emerald-950 bg-white border border-emerald-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-300 placeholder:opacity-50"
+              className="w-full text-2xl font-black font-mono text-emerald-950 bg-white border border-emerald-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-300"
             />
             <span className="text-xs font-bold text-emerald-800">Roll</span>
           </div>
           <div className="flex items-center justify-center gap-1.5 mt-2">
             <button
               type="button"
-              onClick={() => handleOkChange(production.totalOk - 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-emerald-200 text-slate-700 font-bold hover:bg-emerald-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleOkChange(Math.max(0, currentOk - 1));
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-emerald-200 text-slate-700 font-bold hover:bg-emerald-100 transition-colors text-sm cursor-pointer active:scale-95"
             >
-              -
+              -1
             </button>
             <button
               type="button"
-              onClick={() => handleOkChange(production.totalOk + 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-emerald-200 text-slate-700 font-bold hover:bg-emerald-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleOkChange(currentOk + 1);
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-emerald-200 text-slate-700 font-bold hover:bg-emerald-100 transition-colors text-sm cursor-pointer active:scale-95"
             >
-              +
+              +1
             </button>
             <button
               type="button"
-              onClick={() => handleOkChange(production.totalOk + 5)}
-              className="px-2 h-8 rounded-lg bg-white border border-emerald-200 text-slate-700 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleOkChange(currentOk + 5);
+              }}
+              className="px-2.5 h-8 rounded-lg bg-emerald-600 text-white text-xs font-extrabold hover:bg-emerald-700 transition-colors cursor-pointer active:scale-95 shadow-2xs"
             >
               +5
             </button>
@@ -119,30 +178,52 @@ export const RollProductionForm: React.FC<Props> = ({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="0"
-              value={production.totalNg === 0 ? '' : production.totalNg}
+            <CleanNumberInput
+              value={production.totalNg}
+              onChangeValue={handleNgChange}
+              allowDecimals={false}
+              min={0}
               placeholder="0"
-              onChange={(e) => handleNgChange(parseInt(e.target.value, 10) || 0)}
-              className="w-full text-2xl font-black font-mono text-rose-950 bg-white border border-rose-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-rose-500 placeholder:text-slate-300 placeholder:opacity-50"
+              className="w-full text-2xl font-black font-mono text-rose-950 bg-white border border-rose-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-rose-500 placeholder:text-slate-300"
             />
             <span className="text-xs font-bold text-rose-800">Roll</span>
           </div>
           <div className="flex items-center justify-center gap-1.5 mt-2">
             <button
               type="button"
-              onClick={() => handleNgChange(production.totalNg - 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-rose-200 text-slate-700 font-bold hover:bg-rose-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleNgChange(Math.max(0, currentNg - 1));
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-rose-200 text-slate-700 font-bold hover:bg-rose-100 transition-colors text-sm cursor-pointer active:scale-95"
+              title="Kurang 1 Roll Hold"
             >
-              -
+              -1
             </button>
             <button
               type="button"
-              onClick={() => handleNgChange(production.totalNg + 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-rose-200 text-slate-700 font-bold hover:bg-rose-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleNgChange(currentNg + 1);
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-rose-200 text-slate-700 font-bold hover:bg-rose-100 transition-colors text-sm cursor-pointer active:scale-95"
+              title="Tambah 1 Roll Hold"
             >
-              +
+              +1
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleNgChange(currentNg + 5);
+              }}
+              className="px-2.5 h-8 rounded-lg bg-rose-600 text-white text-xs font-extrabold hover:bg-rose-700 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+              title="Tambah 5 Roll Hold"
+            >
+              +5
             </button>
           </div>
         </div>
@@ -159,55 +240,80 @@ export const RollProductionForm: React.FC<Props> = ({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="0"
-              value={production.totalRework === 0 ? '' : production.totalRework}
+            <CleanNumberInput
+              value={production.totalRework}
+              onChangeValue={handleReworkChange}
+              allowDecimals={false}
+              min={0}
               placeholder="0"
-              onChange={(e) => handleReworkChange(parseInt(e.target.value, 10) || 0)}
-              className="w-full text-2xl font-black font-mono text-amber-950 bg-white border border-amber-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-300 placeholder:opacity-50"
+              className="w-full text-2xl font-black font-mono text-amber-950 bg-white border border-amber-300 rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-300"
             />
             <span className="text-xs font-bold text-amber-800">Roll</span>
           </div>
           <div className="flex items-center justify-center gap-1.5 mt-2">
             <button
               type="button"
-              onClick={() => handleReworkChange(production.totalRework - 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-amber-200 text-slate-700 font-bold hover:bg-amber-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleReworkChange(Math.max(0, currentRework - 1));
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-amber-200 text-slate-700 font-bold hover:bg-amber-100 transition-colors text-sm cursor-pointer active:scale-95"
             >
-              -
+              -1
             </button>
             <button
               type="button"
-              onClick={() => handleReworkChange(production.totalRework + 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-amber-200 text-slate-700 font-bold hover:bg-amber-100 transition-colors text-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleReworkChange(currentRework + 1);
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-amber-200 text-slate-700 font-bold hover:bg-amber-100 transition-colors text-sm cursor-pointer active:scale-95"
             >
-              +
+              +1
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleReworkChange(currentRework + 5);
+              }}
+              className="px-2.5 h-8 rounded-lg bg-amber-600 text-white text-xs font-extrabold hover:bg-amber-700 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+            >
+              +5
             </button>
           </div>
         </div>
 
-        {/* Total Roll & Estimasi Berat */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between">
+        {/* Total Produksi Kumulatif */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Scale className="w-4 h-4 text-slate-500" />
-              Total Roll Diproduksi
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Total Produksi
             </span>
-            <span className="text-[11px] font-mono text-slate-500">
-              Extruder Line
+            <span className="text-[11px] font-mono text-slate-500 font-semibold">
+              W: ~{((production.totalOk + production.totalNg + production.totalRework) * totalRollWeightKg).toLocaleString()} kg
             </span>
           </div>
-          <div>
-            <div className="text-2xl font-black font-mono text-slate-900 text-center py-2 bg-white rounded-xl border border-slate-200">
-              {totalProduced} <span className="text-xs font-bold text-slate-500">Roll</span>
-            </div>
-            <div className="text-[11px] text-slate-500 text-center mt-2 flex items-center justify-center gap-1">
-              <span>Estimasi Berat:</span>
-              <strong className="font-mono text-slate-800">
-                {(totalProduced * totalRollWeightKg).toLocaleString()} kg
-              </strong>
-            </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-black font-mono text-slate-900">
+              {totalProduced}
+            </span>
+            <span className="text-xs font-bold text-slate-500">Roll Terinspeksi</span>
+          </div>
+          <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
+            <span>Rejection Rate:</span>
+            <strong
+              className={`font-mono ${
+                production.rejectionRatePct > production.rejectionThresholdFail
+                  ? 'text-rose-600 font-bold'
+                  : 'text-slate-700'
+              }`}
+            >
+              {production.rejectionRatePct.toFixed(2)}%
+            </strong>
           </div>
         </div>
       </div>

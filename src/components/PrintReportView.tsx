@@ -1,11 +1,14 @@
 import React from 'react';
 import { QCReport } from '../types/qc';
+import { formatMeasurement } from '../utils/formatUtils';
+import { CamiloplasLogo } from './CamiloplasLogo';
 
 interface Props {
   report: QCReport;
+  isInteractivePreview?: boolean;
 }
 
-export const PrintReportView: React.FC<Props> = ({ report }) => {
+export const PrintReportView: React.FC<Props> = ({ report, isInteractivePreview = false }) => {
   // Find thickness dimensions
   const widthThickness =
     report.criticalDimensions.find(
@@ -32,31 +35,50 @@ export const PrintReportView: React.FC<Props> = ({ report }) => {
       ? report.criticalDimensions[1]
       : null);
 
-  const isWidthInSpec = widthThickness?.isAllInSpec ?? true;
-  const isLengthInSpec = lengthThickness?.isAllInSpec ?? true;
-  const isOverallPass = isWidthInSpec && isLengthInSpec;
+  const sheetWidthDim = report.criticalDimensions.find(
+    (d) =>
+      d.category === 'ROLL_WIDTH' ||
+      d.id === 'DIM_EXT_WIDTH' ||
+      d.parameterName.toLowerCase().includes('lebar roll') ||
+      d.parameterName.toLowerCase().includes('sheet width')
+  );
 
-  // Helper to generate SVG polyline points for profile graph
+  // Overall Verdict Calculation
+  const allDimensionsInSpec = report.criticalDimensions.every((d) => d.isAllInSpec);
+  const isRejectRateOk = report.production.rejectionRatePct <= report.production.rejectionThresholdFail;
+  const isOverallPass = allDimensionsInSpec && isRejectRateOk;
+
+  // Active defects with count > 0
+  const activeDefects = report.defects.filter((d) => d.count > 0);
+
+  // Extruder roll metrology auto-calculation
+  const avgWidth = sheetWidthDim?.mean || sheetWidthDim?.nominal || 650;
+  const avgThick = widthThickness?.mean || widthThickness?.nominal || 0.5;
+  const estimatedRollLengthM = Number(((100 * 1000) / (avgWidth * avgThick * 1.045)).toFixed(1));
+  const estimatedGsm = Number((avgThick * 1.045 * 1000).toFixed(1));
+  const weightPerMeter = Number(((avgWidth / 1000) * estimatedGsm).toFixed(1));
+
+  // High-precision SVG tolerance chart with natural number formatting
   const generateSvgChart = (
     dim = widthThickness,
     labels = ['Kiri', 'Tg. Kiri', 'Center', 'Tg. Kanan', 'Kanan']
   ) => {
-    if (!dim || !dim.samples) return null;
+    if (!dim || !dim.samples || dim.samples.length === 0) return null;
 
-    const width = 340;
+    const width = 360;
     const height = 110;
-    const padding = { top: 20, right: 30, bottom: 25, left: 45 };
+    const padding = { top: 18, right: 42, bottom: 24, left: 42 };
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
-    const nominal = dim.nominal;
-    const usl = dim.upperSpecLimit;
-    const lsl = dim.lowerSpecLimit;
+    const nominal = dim.nominal || 0.5;
+    const usl = dim.upperSpecLimit || 0.53;
+    const lsl = dim.lowerSpecLimit || 0.47;
     const yMin = lsl - 0.015;
     const yMax = usl + 0.015;
 
     const getY = (val: number) => {
-      const ratio = (val - yMin) / (yMax - yMin);
+      const ratio = (val - yMin) / Math.max(0.001, yMax - yMin);
       return padding.top + (1 - Math.max(0, Math.min(1, ratio))) * chartH;
     };
 
@@ -79,90 +101,95 @@ export const PrintReportView: React.FC<Props> = ({ report }) => {
     const lslY = getY(lsl);
 
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-36">
-        {/* Background tolerance area */}
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-28">
+        {/* Background tolerance band */}
         <rect
           x={padding.left}
           y={uslY}
           width={chartW}
           height={Math.max(1, lslY - uslY)}
-          fill="#ecfdf5"
-          opacity="0.8"
+          fill="#f0fdf4"
+          stroke="#86efac"
+          strokeWidth="0.5"
         />
 
-        {/* Grid lines */}
+        {/* USL line */}
         <line
           x1={padding.left}
           y1={uslY}
           x2={width - padding.right}
           y2={uslY}
-          stroke="#ef4444"
-          strokeDasharray="3 3"
-          strokeWidth="1"
+          stroke="#b91c1c"
+          strokeDasharray="3 2"
+          strokeWidth="0.9"
         />
         <text
-          x={width - padding.right + 2}
+          x={width - padding.right + 3}
           y={uslY + 3}
-          fill="#ef4444"
+          fill="#b91c1c"
           fontSize="7"
           fontFamily="monospace"
+          fontWeight="bold"
         >
-          USL {usl.toFixed(3)}
+          USL {formatMeasurement(usl)}
         </text>
 
+        {/* Nominal line */}
         <line
           x1={padding.left}
           y1={nomY}
           x2={width - padding.right}
           y2={nomY}
-          stroke="#10b981"
+          stroke="#047857"
           strokeWidth="1.2"
         />
         <text
-          x={width - padding.right + 2}
+          x={width - padding.right + 3}
           y={nomY + 3}
-          fill="#059669"
+          fill="#047857"
           fontSize="7"
           fontWeight="bold"
           fontFamily="monospace"
         >
-          Nom {nominal.toFixed(3)}
+          Nom {formatMeasurement(nominal)}
         </text>
 
+        {/* LSL line */}
         <line
           x1={padding.left}
           y1={lslY}
           x2={width - padding.right}
           y2={lslY}
-          stroke="#ef4444"
-          strokeDasharray="3 3"
-          strokeWidth="1"
+          stroke="#b91c1c"
+          strokeDasharray="3 2"
+          strokeWidth="0.9"
         />
         <text
-          x={width - padding.right + 2}
+          x={width - padding.right + 3}
           y={lslY + 3}
-          fill="#ef4444"
+          fill="#b91c1c"
           fontSize="7"
           fontFamily="monospace"
+          fontWeight="bold"
         >
-          LSL {lsl.toFixed(3)}
+          LSL {formatMeasurement(lsl)}
         </text>
 
-        {/* Left Y Axis line and ticks */}
+        {/* Y Axis line */}
         <line
           x1={padding.left}
           y1={padding.top}
           x2={padding.left}
           y2={height - padding.bottom}
-          stroke="#94a3b8"
-          strokeWidth="1"
+          stroke="#334155"
+          strokeWidth="0.9"
         />
 
         {/* Data curve line */}
         <polyline
           fill="none"
-          stroke="#2563eb"
-          strokeWidth="2"
+          stroke="#1d4ed8"
+          strokeWidth="1.8"
           strokeLinejoin="round"
           points={pointsStr}
         />
@@ -180,7 +207,7 @@ export const PrintReportView: React.FC<Props> = ({ report }) => {
                 cx={cx}
                 cy={cy}
                 r="3.5"
-                fill={isOk ? '#2563eb' : '#dc2626'}
+                fill={isOk ? '#1d4ed8' : '#b91c1c'}
                 stroke="#ffffff"
                 strokeWidth="1"
               />
@@ -190,18 +217,18 @@ export const PrintReportView: React.FC<Props> = ({ report }) => {
                 textAnchor="middle"
                 fontSize="7"
                 fontWeight="bold"
-                fill={isOk ? '#1e293b' : '#dc2626'}
+                fill={isOk ? '#0f172a' : '#b91c1c'}
                 fontFamily="monospace"
               >
-                {s.val.toFixed(3)}
+                {formatMeasurement(s.val)}
               </text>
               <text
                 x={cx}
-                y={height - padding.bottom + 11}
+                y={height - padding.bottom + 10}
                 textAnchor="middle"
-                fontSize="7"
-                fill="#475569"
-                fontWeight="500"
+                fontSize="6.5"
+                fill="#334155"
+                fontWeight="700"
               >
                 {label.replace('Sisi ', '').replace(' (Tengah)', '')}
               </text>
@@ -212,209 +239,434 @@ export const PrintReportView: React.FC<Props> = ({ report }) => {
     );
   };
 
+  const targetPlantLabel =
+    report.header.destinationPlant === 'PROSES_2_BOLANG'
+      ? 'Proses 2 Pabrik Bolang (Tigaraksa)'
+      : 'Proses 2 Pabrik Jati (Jatiuwung)';
+
   return (
-    <div id="print-report-container" className="hidden print:block p-6 max-w-4xl mx-auto bg-white text-slate-900 font-sans text-xs">
-      {/* Header Document */}
-      <div className="border border-slate-400 mb-4 rounded-lg overflow-hidden">
-        <div className="flex border-b border-slate-400 bg-slate-50 items-center">
-          <div className="w-20 p-2.5 flex items-center justify-center font-extrabold text-blue-800 text-sm border-r border-slate-400">
-            QC-EXT
-          </div>
-          <div className="flex-1 p-2.5 text-center border-r border-slate-400">
-            <h1 className="text-sm font-black tracking-wide uppercase">
-              LEMBAR LAPORAN QUALITY CONTROL (QC) INSPECTION
-            </h1>
-            <div className="text-[10px] font-bold text-blue-900">
-              PROSES EXTRUDER — PRODUKSI ROLL SHEET (FEED UNTUK PROSES 2)
-            </div>
-          </div>
-          <div className="p-2 text-[10px] space-y-0.5 w-44">
-            <div><strong>No. Dok:</strong> <span className="font-mono">{report.header.reportNumber || '-'}</span></div>
-            <div><strong>Tgl:</strong> {report.header.inspectionDate || '-'}</div>
-            <div><strong>Rev:</strong> 02 / ISO 9001:2015</div>
-          </div>
+    <div
+      id="print-report-container"
+      className={`${
+        isInteractivePreview ? 'block w-full max-w-[210mm] mx-auto p-4 sm:p-8' : 'hidden print:block w-full'
+      } bg-white text-black font-sans leading-tight`}
+    >
+      {/* 1. OFFICIAL CORPORATE / FACTORY HEADER */}
+      <table className="w-full border-2 border-black border-collapse mb-2.5">
+        <tbody>
+          <tr>
+            {/* Logo / Company Box */}
+            <td className="w-56 p-2 border-r-2 border-black align-middle text-center bg-slate-50">
+              <div className="flex justify-center mb-1">
+                <CamiloplasLogo size="sm" showText={false} />
+              </div>
+              <div className="font-black text-xs tracking-tight text-blue-950 uppercase">
+                PT CAMILOPLAS JAYA MAKMUR
+              </div>
+              <div className="text-[8.5px] font-black text-blue-700 uppercase tracking-widest mt-0.5">
+                INSPECTOR QUALITY SYSTEM
+              </div>
+              <div className="text-[7.5px] font-semibold text-slate-600 mt-1 border-t border-slate-300 pt-0.5">
+                Pabrik Jati & Pabrik Bolang · ISO 9001:2015
+              </div>
+            </td>
+
+            {/* Document Title Center */}
+            <td className="p-2.5 border-r-2 border-black text-center align-middle">
+              <div className="text-[10px] font-bold text-slate-700 tracking-wider uppercase mb-0.5">
+                SERTIFIKASI INSPEKSI MUTU & PELEPASAN LOT
+              </div>
+              <h1 className="text-base sm:text-lg font-black tracking-wide uppercase text-black">
+                LEMBAR LAPORAN INSPECTOR QUALITY
+              </h1>
+              <div className="text-[9px] text-slate-700 mt-1 font-semibold italic">
+                {report.header.processType === 'EXTRUDER'
+                  ? 'Stasiun: Ekstrusi Roll Sheet (Raw Sheet Feed Production)'
+                  : 'Stasiun: Thermoforming & Stamping (Mesin Kiefel Stasiun 2)'}
+              </div>
+              <div className="text-[8.5px] font-bold text-blue-900 mt-0.5">
+                Tujuan Transfer: {targetPlantLabel}
+              </div>
+            </td>
+
+            {/* Document Control Box */}
+            <td className="w-56 p-2 align-middle text-[9px] font-sans space-y-1 bg-slate-50">
+              <div className="flex justify-between border-b border-slate-300 pb-0.5">
+                <span className="text-slate-600 font-semibold">No. Dokumen:</span>
+                <span className="font-mono font-bold text-black">QC-CJM-2026/04</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-300 pb-0.5">
+                <span className="text-slate-600 font-semibold">No. Laporan:</span>
+                <span className="font-mono font-black text-blue-950">{report.header.reportNumber || 'QC-EXT-001'}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-300 pb-0.5">
+                <span className="text-slate-600 font-semibold">Tgl Inspeksi:</span>
+                <span className="font-bold text-black">{report.header.inspectionDate || '-'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-semibold">Status Dokumen:</span>
+                <span className="font-bold text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  CONTROLLED COPY
+                </span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 2. METADATA MATRIX */}
+      <table className="w-full border-2 border-black border-collapse mb-2.5 text-[9.5px]">
+        <tbody>
+          <tr className="border-b border-black bg-slate-100 font-black text-slate-900">
+            <td colSpan={6} className="p-1 px-2 uppercase tracking-wider text-[10px]">
+              A. INFORMASI SPK, MESIN & SPESIFIKASI PRODUKSI (PT CAMILOPLAS JAYA MAKMUR)
+            </td>
+          </tr>
+          <tr className="border-b border-black">
+            <td className="w-24 p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">No. SPK / WO:</td>
+            <td className="p-1.5 font-mono font-bold border-r border-black text-blue-950">{report.header.workOrderNumber || '-'}</td>
+            <td className="w-24 p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Mesin / Line:</td>
+            <td className="p-1.5 font-bold border-r border-black">{report.header.machineName || '-'}</td>
+            <td className="w-24 p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Operator Mesin:</td>
+            <td className="p-1.5 font-bold">{report.header.operatorName || '-'}</td>
+          </tr>
+          <tr className="border-b border-black">
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Nama Produk:</td>
+            <td className="p-1.5 font-bold border-r border-black text-black">{report.header.partName || '-'}</td>
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Shift Kerja:</td>
+            <td className="p-1.5 font-bold border-r border-black">{report.header.shift.replace('_', ' ')}</td>
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Inspector QC:</td>
+            <td className="p-1.5 font-bold text-blue-900">{report.header.inspectorName || '-'}</td>
+          </tr>
+          <tr>
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Nomor LOT:</td>
+            <td className="p-1.5 font-mono font-bold border-r border-black">{report.header.partNumber || '-'}</td>
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Tujuan Alokasi:</td>
+            <td className="p-1.5 font-bold border-r border-black text-blue-900">{targetPlantLabel}</td>
+            <td className="p-1.5 font-bold text-slate-700 bg-slate-50 border-r border-black">Material Grade:</td>
+            <td className="p-1.5 font-semibold">{report.header.materialGrade || '-'}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 3. OUTPUT SUMMARY & TONNAGE (HASIL PRODUKSI) */}
+      <table className="w-full border-2 border-black border-collapse mb-2.5 text-[9.5px]">
+        <tbody>
+          <tr className="border-b border-black bg-slate-100 font-black text-slate-900">
+            <td colSpan={5} className="p-1 px-2 uppercase tracking-wider text-[10px]">
+              B. RINGKASAN OUTPUT PRODUKSI & EVALUASI TINGKAT REJECT (YIELD)
+            </td>
+          </tr>
+          <tr className="text-center font-bold">
+            <td className="p-2 border-r border-black w-1/5 bg-emerald-50/70">
+              <div className="text-[9px] uppercase font-black text-emerald-900">Total OK (Lolos)</div>
+              <div className="text-base font-mono font-black text-emerald-950 mt-0.5">
+                {report.production.totalOk.toLocaleString()}
+              </div>
+              <div className="text-[8px] text-emerald-800 font-semibold">
+                {report.production.totalProduced > 0
+                  ? ((report.production.totalOk / report.production.totalProduced) * 100).toFixed(1)
+                  : 100}% Lolos Standar
+              </div>
+            </td>
+            <td className="p-2 border-r border-black w-1/5 bg-rose-50/70">
+              <div className="text-[9px] uppercase font-black text-rose-900">Roll Hold (Reject)</div>
+              <div className="text-base font-mono font-black text-rose-950 mt-0.5">
+                {report.production.totalNg.toLocaleString()}
+              </div>
+              <div className="text-[8px] text-rose-800 font-semibold">Dimensi Out / Hold</div>
+            </td>
+            <td className="p-2 border-r border-black w-1/5 bg-amber-50/70">
+              <div className="text-[9px] uppercase font-black text-amber-900">Total Rework</div>
+              <div className="text-base font-mono font-black text-amber-950 mt-0.5">
+                {report.production.totalRework.toLocaleString()}
+              </div>
+              <div className="text-[8px] text-amber-800 font-semibold">Re-trimming / Perbaikan</div>
+            </td>
+            <td className="p-2 border-r border-black w-1/5 bg-slate-50">
+              <div className="text-[9px] uppercase font-black text-slate-800">Total Produksi</div>
+              <div className="text-base font-mono font-black text-slate-950 mt-0.5">
+                {report.production.totalProduced.toLocaleString()}
+              </div>
+              <div className="text-[8px] text-slate-600 font-semibold">Akumulasi Roll Diperiksa</div>
+            </td>
+            <td className={`p-2 w-1/5 ${report.production.rejectionRatePct > report.production.rejectionThresholdFail ? 'bg-rose-100 text-rose-950' : 'bg-slate-50 text-slate-900'}`}>
+              <div className="text-[9px] uppercase font-black">Reject Rate (%)</div>
+              <div className="text-base font-mono font-black mt-0.5">
+                {report.production.rejectionRatePct.toFixed(2)}%
+              </div>
+              <div className="text-[8px] font-bold">Batas Ambang: {report.production.rejectionThresholdFail}%</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 4. METROLOGI PANJANG ROLL & GRAFIK VISUAL (KHUSUS EXTRUDER) */}
+      <div className="border-2 border-black mb-2.5 p-2 bg-white print-avoid-break">
+        <div className="flex items-center justify-between border-b border-black pb-1 mb-2">
+          <span className="font-black text-[10px] uppercase tracking-wider text-slate-900">
+            C. KALKULASI METROLOGI GULUNGAN ROLL & GRAFIK PROFIL KETEBALAN (MICROMETER)
+          </span>
+          <span className="text-[9px] font-mono text-slate-700 font-bold">
+            ρ: 1.045 g/cm³ · Resolusi Sensor: 0.001 mm
+          </span>
         </div>
 
-        {/* Metadata Grid */}
-        <div className="grid grid-cols-3 divide-x border-b border-slate-300 text-[11px]">
-          <div className="p-2 space-y-1">
-            <div><span className="text-slate-500">No. SPK:</span> <strong className="font-mono text-blue-900">{report.header.workOrderNumber || '-'}</strong></div>
-            <div><span className="text-slate-500">Nomor LOT:</span> <strong className="font-mono">{report.header.partNumber || '-'}</strong></div>
-            <div><span className="text-slate-500">Nama Produk:</span> <strong>{report.header.partName || '-'}</strong></div>
-          </div>
-          <div className="p-2 space-y-1">
-            <div><span className="text-slate-500">Nomor Mesin:</span> <strong>{report.header.machineName || '-'}</strong></div>
-            <div><span className="text-slate-500">Material Grade:</span> {report.header.materialGrade || '-'}</div>
-            <div><span className="text-slate-500">Shift Kerja:</span> <strong>{report.header.shift.replace('_', ' ')}</strong></div>
-          </div>
-          <div className="p-2 space-y-1">
-            <div><span className="text-slate-500">Inspector QC:</span> {report.header.inspectorName || '-'}</div>
-            <div><span className="text-slate-500">Operator Extruder:</span> {report.header.operatorName || '-'}</div>
-          </div>
-        </div>
-
-        {/* Production Output Summary */}
-        <div className="p-2 text-[11px] bg-slate-50 flex items-center justify-between">
+        {/* Metrology Metrics Strip */}
+        <div className="grid grid-cols-4 gap-2 mb-2 p-1.5 bg-slate-50 border border-slate-300 text-center text-[9px]">
           <div>
-            <strong>Output Produksi Roll:</strong> OK: <strong className="text-emerald-700">{report.production.totalOk} Roll</strong> | Hold/Reject: <strong className="text-rose-700">{report.production.totalNg} Roll</strong> | Rework: {report.production.totalRework} Roll | Total: {report.production.totalProduced} Roll
+            <span className="text-slate-600 font-bold block">Estimasi Panjang Roll:</span>
+            <strong className="text-xs font-mono font-black text-blue-950">{estimatedRollLengthM.toLocaleString()} m</strong>
           </div>
           <div>
-            <strong>Tujuan Distribusi:</strong> <span className="text-blue-800 font-bold">Lanjut Proses 2</span>
+            <span className="text-slate-600 font-bold block">Gramatur Sheet (GSM):</span>
+            <strong className="text-xs font-mono font-black text-emerald-900">{estimatedGsm} g/m²</strong>
+          </div>
+          <div>
+            <span className="text-slate-600 font-bold block">Berat per Meter:</span>
+            <strong className="text-xs font-mono font-black text-slate-950">{weightPerMeter} g/m</strong>
+          </div>
+          <div>
+            <span className="text-slate-600 font-bold block">Lebar Sheet Terukur:</span>
+            <strong className="text-xs font-mono font-black text-slate-950">{formatMeasurement(avgWidth)} mm</strong>
           </div>
         </div>
-      </div>
 
-      {/* SECTION 1: GRAFIK KETEBALAN ROLL SHEET (VISUAL CHARTS) */}
-      <div className="mb-4 border border-slate-300 rounded-lg p-3 bg-white">
-        <h2 className="text-xs font-bold uppercase mb-2 pb-1 border-b border-slate-300 flex items-center justify-between">
-          <span>1. Grafik Profil Ketebalan Roll Sheet (Thickness Profile Charts)</span>
-          <span className="text-[10px] font-normal text-slate-500">Alat Ukur: Micrometer (Resolusi 0.001 mm)</span>
-        </h2>
-
-        <div className="grid grid-cols-2 gap-4">
-          {/* Grafik Ketebalan Arah Lebar */}
-          <div className="border border-slate-200 rounded p-2 bg-slate-50/50">
-            <div className="flex justify-between items-center mb-1 text-[10px] font-bold">
-              <span>(A) Profil Ketebalan Arah Lebar (Cross-Direction)</span>
-              <span className="text-slate-600 font-mono">Nom: {widthThickness?.nominal.toFixed(3)} mm</span>
+        {/* Visual Thickness Charts */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Arah Lebar */}
+          <div className="border border-slate-400 p-1.5 rounded bg-slate-50/50">
+            <div className="flex justify-between items-center text-[9px] font-bold border-b border-slate-300 pb-0.5 mb-1">
+              <span>(1) Ketebalan Arah Lebar (Cross-Direction)</span>
+              <span className="font-mono text-slate-700">Nom: {formatMeasurement(widthThickness?.nominal)} mm</span>
             </div>
             {generateSvgChart(widthThickness, ['Kiri', 'Tg. Kiri', 'Center', 'Tg. Kanan', 'Kanan'])}
-            <div className="text-[9px] text-slate-500 mt-1 flex justify-between">
-              <span>Mean: {widthThickness?.mean !== null ? `${widthThickness.mean.toFixed(3)} mm` : '-'}</span>
-              <span>Min: {widthThickness?.min !== null ? `${widthThickness.min.toFixed(3)} mm` : '-'}</span>
-              <span>Max: {widthThickness?.max !== null ? `${widthThickness.max.toFixed(3)} mm` : '-'}</span>
-              <span>Range: {widthThickness?.range !== null ? `${widthThickness.range.toFixed(3)} mm` : '-'}</span>
+            <div className="flex justify-between text-[8px] font-mono text-slate-700 mt-1 pt-0.5 border-t border-slate-300 font-semibold">
+              <span>x̄: {formatMeasurement(widthThickness?.mean)}</span>
+              <span>Min: {formatMeasurement(widthThickness?.min)}</span>
+              <span>Max: {formatMeasurement(widthThickness?.max)}</span>
+              <span>R: {formatMeasurement(widthThickness?.range)}</span>
+              <span>Status: <strong className={widthThickness?.isAllInSpec ? 'text-emerald-800' : 'text-rose-800'}>{widthThickness?.isAllInSpec ? 'OK' : 'OUT'}</strong></span>
             </div>
           </div>
 
-          {/* Grafik Ketebalan Arah Panjang */}
-          <div className="border border-slate-200 rounded p-2 bg-slate-50/50">
-            <div className="flex justify-between items-center mb-1 text-[10px] font-bold">
-              <span>(B) Profil Ketebalan Arah Panjang (Machine-Direction)</span>
-              <span className="text-slate-600 font-mono">Nom: {lengthThickness?.nominal.toFixed(3) || '0.500'} mm</span>
+          {/* Arah Panjang */}
+          <div className="border border-slate-400 p-1.5 rounded bg-slate-50/50">
+            <div className="flex justify-between items-center text-[9px] font-bold border-b border-slate-300 pb-0.5 mb-1">
+              <span>(2) Ketebalan Arah Panjang (Machine-Direction)</span>
+              <span className="font-mono text-slate-700">Nom: {formatMeasurement(lengthThickness?.nominal || widthThickness?.nominal)} mm</span>
             </div>
             {lengthThickness
-              ? generateSvgChart(lengthThickness, ['0m (Awal)', '50m', '100m', '150m', '200m (Akhir)'])
-              : generateSvgChart(widthThickness, ['0m (Awal)', '50m', '100m', '150m', '200m (Akhir)'])}
-            <div className="text-[9px] text-slate-500 mt-1 flex justify-between">
-              <span>Mean: {lengthThickness && lengthThickness.mean !== null ? `${lengthThickness.mean.toFixed(3)} mm` : '-'}</span>
-              <span>Min: {lengthThickness && lengthThickness.min !== null ? `${lengthThickness.min.toFixed(3)} mm` : '-'}</span>
-              <span>Max: {lengthThickness && lengthThickness.max !== null ? `${lengthThickness.max.toFixed(3)} mm` : '-'}</span>
-              <span>Range: {lengthThickness && lengthThickness.range !== null ? `${lengthThickness.range.toFixed(3)} mm` : '-'}</span>
+              ? generateSvgChart(lengthThickness, ['0m', '50m', '100m', '150m', '200m'])
+              : generateSvgChart(widthThickness, ['0m', '50m', '100m', '150m', '200m'])}
+            <div className="flex justify-between text-[8px] font-mono text-slate-700 mt-1 pt-0.5 border-t border-slate-300 font-semibold">
+              <span>x̄: {formatMeasurement(lengthThickness?.mean ?? widthThickness?.mean)}</span>
+              <span>Min: {formatMeasurement(lengthThickness?.min ?? widthThickness?.min)}</span>
+              <span>Max: {formatMeasurement(lengthThickness?.max ?? widthThickness?.max)}</span>
+              <span>R: {formatMeasurement(lengthThickness?.range ?? widthThickness?.range)}</span>
+              <span>Status: <strong className={(lengthThickness?.isAllInSpec ?? widthThickness?.isAllInSpec) ? 'text-emerald-800' : 'text-rose-800'}>{(lengthThickness?.isAllInSpec ?? widthThickness?.isAllInSpec) ? 'OK' : 'OUT'}</strong></span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: TABEL DATA PENGUKURAN DIMENSI */}
-      <div className="mb-4">
-        <h2 className="text-xs font-bold uppercase mb-1.5 border-b pb-0.5">
-          2. Data Pengukuran Dimensi Kritis & Spesifikasi Roll Sheet
-        </h2>
-        <table className="w-full text-left text-[10px] border-collapse border border-slate-300">
+      {/* 5. TABEL PENGUKURAN DIMENSI KRITIS (SPC SAMPLES S1-S5) */}
+      <table className="w-full border-2 border-black border-collapse mb-2.5 text-[8.5px] print-avoid-break">
+        <thead>
+          <tr className="bg-slate-100 font-black border-b border-black text-slate-950">
+            <th colSpan={14} className="p-1 px-2 text-left uppercase tracking-wider text-[10px]">
+              D. DATA PENGUKURAN DIMENSI KRITIS (SPC 5-SAMPLE CHECK)
+            </th>
+          </tr>
+          <tr className="bg-slate-200 border-b border-black text-center font-black text-slate-900">
+            <th className="p-1 border border-black w-6">No</th>
+            <th className="p-1 border border-black text-left">Karakteristik Pengukuran</th>
+            <th className="p-1 border border-black w-24">Alat Ukur</th>
+            <th className="p-1 border border-black w-14">Nominal</th>
+            <th className="p-1 border border-black w-14">LSL (Min)</th>
+            <th className="p-1 border border-black w-14">USL (Max)</th>
+            <th className="p-1 border border-black w-12 bg-blue-50/50">S1</th>
+            <th className="p-1 border border-black w-12 bg-blue-50/50">S2</th>
+            <th className="p-1 border border-black w-12 bg-blue-50/50">S3</th>
+            <th className="p-1 border border-black w-12 bg-blue-50/50">S4</th>
+            <th className="p-1 border border-black w-12 bg-blue-50/50">S5</th>
+            <th className="p-1 border border-black w-14">Mean (x̄)</th>
+            <th className="p-1 border border-black w-12">Range (R)</th>
+            <th className="p-1 border border-black w-20">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {report.criticalDimensions.map((dim, idx) => (
+            <tr key={dim.id} className="border-b border-black text-center font-mono">
+              <td className="p-1 border border-black font-bold">{idx + 1}</td>
+              <td className="p-1 border border-black text-left font-sans font-bold text-slate-950">{dim.parameterName}</td>
+              <td className="p-1 border border-black font-sans text-slate-800">{dim.toolUsed}</td>
+              <td className="p-1 border border-black font-bold">{formatMeasurement(dim.nominal)}</td>
+              <td className="p-1 border border-black text-slate-700">{formatMeasurement(dim.lowerSpecLimit)}</td>
+              <td className="p-1 border border-black text-slate-700">{formatMeasurement(dim.upperSpecLimit)}</td>
+              {dim.samples.map((s, sIdx) => {
+                const isOos = dim.outOfSpecIndices.includes(sIdx);
+                return (
+                  <td
+                    key={sIdx}
+                    className={`p-1 border border-black ${
+                      isOos ? 'bg-rose-200 font-black text-rose-950' : ''
+                    }`}
+                  >
+                    {formatMeasurement(s)}
+                  </td>
+                );
+              })}
+              <td className="p-1 border border-black font-bold text-slate-950">
+                {formatMeasurement(dim.mean)}
+              </td>
+              <td className="p-1 border border-black text-slate-800">
+                {formatMeasurement(dim.range)}
+              </td>
+              <td className="p-1 border border-black font-sans font-bold">
+                {dim.isAllInSpec ? (
+                  <span className="text-emerald-900 font-extrabold">IN-SPEC (OK)</span>
+                ) : (
+                  <span className="text-rose-950 bg-rose-200 px-1 py-0.5 rounded font-black">OUT (HOLD)</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* 6. DEFECT CHECKLIST & CAVITY BREAKDOWN (IF ANY DEFECTS REPORTED) */}
+      {activeDefects.length > 0 && (
+        <table className="w-full border-2 border-black border-collapse mb-2.5 text-[8.5px] print-avoid-break">
           <thead>
-            <tr className="bg-slate-100 font-bold border-b border-slate-300">
-              <th className="border border-slate-300 p-1">Karakteristik Pengukuran</th>
-              <th className="border border-slate-300 p-1">Alat Ukur</th>
-              <th className="border border-slate-300 p-1 text-center">Nominal</th>
-              <th className="border border-slate-300 p-1 text-center">LSL</th>
-              <th className="border border-slate-300 p-1 text-center">USL</th>
-              <th className="border border-slate-300 p-1 text-center">S1</th>
-              <th className="border border-slate-300 p-1 text-center">S2</th>
-              <th className="border border-slate-300 p-1 text-center">S3</th>
-              <th className="border border-slate-300 p-1 text-center">S4</th>
-              <th className="border border-slate-300 p-1 text-center">S5</th>
-              <th className="border border-slate-300 p-1 text-center">Mean (x̄)</th>
-              <th className="border border-slate-300 p-1 text-center">Range (R)</th>
-              <th className="border border-slate-300 p-1 text-center">Status</th>
+            <tr className="bg-slate-100 font-black border-b border-black text-slate-950">
+              <th colSpan={4} className="p-1 px-2 text-left uppercase tracking-wider text-[10px]">
+                E. RINCIAN TEMUAN CACAT VISUAL & DEFECT LOG
+              </th>
+            </tr>
+            <tr className="bg-slate-200 border-b border-black text-center font-bold">
+              <th className="p-1 border border-black w-8">No</th>
+              <th className="p-1 border border-black text-left">Jenis Cacat / Defect</th>
+              <th className="p-1 border border-black w-28">Jumlah Ditemukan</th>
+              <th className="p-1 border border-black w-28">Persentase Reject</th>
             </tr>
           </thead>
           <tbody>
-            {report.criticalDimensions.map((dim) => (
-              <tr key={dim.id}>
-                <td className="border border-slate-300 p-1 font-medium">{dim.parameterName}</td>
-                <td className="border border-slate-300 p-1">{dim.toolUsed}</td>
-                <td className="border border-slate-300 p-1 text-center font-mono">{dim.nominal.toFixed(3)}</td>
-                <td className="border border-slate-300 p-1 text-center font-mono">{dim.lowerSpecLimit.toFixed(3)}</td>
-                <td className="border border-slate-300 p-1 text-center font-mono">{dim.upperSpecLimit.toFixed(3)}</td>
-                {dim.samples.map((s, idx) => (
-                  <td
-                    key={idx}
-                    className={`border border-slate-300 p-1 text-center font-mono ${
-                      dim.outOfSpecIndices.includes(idx) ? 'bg-red-100 font-bold text-red-700' : ''
-                    }`}
-                  >
-                    {s !== null ? s.toFixed(3) : '-'}
-                  </td>
-                ))}
-                <td className="border border-slate-300 p-1 text-center font-mono font-bold">
-                  {dim.mean !== null ? dim.mean.toFixed(3) : '-'}
-                </td>
-                <td className="border border-slate-300 p-1 text-center font-mono">
-                  {dim.range !== null ? dim.range.toFixed(3) : '-'}
-                </td>
-                <td className="border border-slate-300 p-1 text-center font-bold">
-                  {dim.isAllInSpec ? (
-                    <span className="text-emerald-700">OK</span>
-                  ) : (
-                    <span className="text-rose-700">NG (OOS)</span>
-                  )}
+            {activeDefects.map((def, idx) => (
+              <tr key={def.id} className="border-b border-black text-center font-mono">
+                <td className="p-1 border border-black">{idx + 1}</td>
+                <td className="p-1 border border-black text-left font-sans font-bold text-slate-900">{def.name} ({def.indonesianName})</td>
+                <td className="p-1 border border-black font-bold text-rose-950">{def.count} pcs</td>
+                <td className="p-1 border border-black text-slate-800 font-bold">
+                  {report.production.totalProduced > 0
+                    ? ((def.count / report.production.totalProduced) * 100).toFixed(2)
+                    : 0}%
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      )}
 
-      {/* SECTION 3: KEPUTUSAN RELEASE & TANDA TANGAN */}
-      <div className="border border-slate-300 rounded-lg p-3 bg-slate-50 mb-4">
-        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-800">
-            3. Rekomendasi Kelolosan Lot ke Proses 2 Kiefel:
-          </div>
-          <div
-            className={`px-3 py-1 rounded text-xs font-black uppercase ${
-              isOverallPass
-                ? 'bg-emerald-600 text-white'
-                : 'bg-rose-600 text-white'
-            }`}
-          >
-            {isOverallPass
-              ? 'LOLOS INSPEKSI (RELEASED TO PROSES 2)'
-              : 'DITAHAN / HOLD (REVISE EXTRUDER SETUP)'}
-          </div>
-        </div>
+      {/* 7. KEPUTUSAN RELEASE, CATATAN & FORMAL SIGNATURE BLOCK */}
+      <table className="w-full border-2 border-black border-collapse text-[9px] print-avoid-break">
+        <tbody>
+          <tr className="border-b border-black bg-slate-100 font-black text-slate-950">
+            <td colSpan={3} className="p-1 px-2 uppercase tracking-wider text-[10px]">
+              F. KEPUTUSAN PELEPASAN LOT (RELEASE DISPOSITION) & PENGESAHAN
+            </td>
+          </tr>
 
-        <div className="grid grid-cols-2 gap-4 text-[10px]">
-          <div>
-            <strong>Catatan Mesin & Parameter Extruder:</strong>
-            <p className="mt-1 text-slate-700 italic border p-1.5 rounded bg-white min-h-[35px]">
-              {report.notes || 'Temperatur barrel stabil. Tarikan chill roll seragam.'}
-            </p>
-          </div>
-          <div>
-            <strong>Tindakan Korektif / Penyetelan:</strong>
-            <p className="mt-1 text-slate-700 italic border p-1.5 rounded bg-white min-h-[35px]">
-              {report.correctiveAction || 'Parameter dipertahankan untuk running berikutnya.'}
-            </p>
-          </div>
-        </div>
-      </div>
+          {/* Verdict Seal Stamp */}
+          <tr className="border-b border-black">
+            <td colSpan={3} className="p-2.5 text-center">
+              <div
+                className={`inline-block border-2 px-6 py-2 rounded-lg text-center font-black tracking-wider uppercase ${
+                  isOverallPass
+                    ? 'border-emerald-800 bg-emerald-50 text-emerald-950'
+                    : 'border-rose-800 bg-rose-50 text-rose-950'
+                }`}
+              >
+                <div className="text-sm">
+                  {isOverallPass
+                    ? `✓ KEPUTUSAN: LOT LOLOS INSPEKSI (RELEASED TO ${targetPlantLabel.toUpperCase()})`
+                    : '✗ KEPUTUSAN: LOT DITAHAN (ON HOLD / RE-INSPECT)'}
+                </div>
+                <div className="text-[8.5px] font-semibold normal-case mt-0.5 text-slate-700">
+                  {isOverallPass
+                    ? `Seluruh dimensi kritis dan spesifikasi toleransi memenuhi standar mutu PT Camiloplas Jaya Makmur (ISO 9001:2015).`
+                    : 'Terdapat dimensi atau tingkat reject yang melampaui batas toleransi yang diizinkan.'}
+                </div>
+              </div>
+            </td>
+          </tr>
 
-      {/* Signature Grid */}
-      <div className="grid grid-cols-3 border border-slate-400 text-[10px] text-center divide-x border-t-0">
-        <div className="p-2 flex flex-col justify-between h-20">
-          <div className="text-slate-500 font-semibold">Operator Extruder</div>
-          <div className="font-bold underline uppercase">{report.header.operatorName || 'Operator'}</div>
-        </div>
-        <div className="p-2 flex flex-col justify-between h-20">
-          <div className="text-slate-500 font-semibold">Inspector QC</div>
-          <div className="font-bold underline uppercase">{report.header.inspectorName || 'QC Inspector'}</div>
-        </div>
-        <div className="p-2 flex flex-col justify-between h-20">
-          <div className="text-slate-500 font-semibold">Disetujui QA / QC Leader</div>
-          <div className="font-bold underline uppercase">{report.approvedBy || 'Hendra Gunawan (QC Leader)'}</div>
-        </div>
+          {/* Notes & Corrective Actions */}
+          <tr className="border-b border-black">
+            <td colSpan={3} className="p-2 text-[9px]">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <strong className="block text-slate-800 font-bold mb-0.5">Catatan QC & Parameter Proses:</strong>
+                  <div className="p-1.5 border border-slate-400 rounded bg-slate-50 min-h-[34px] text-slate-900 font-medium">
+                    {report.notes || 'Pengukuran dimensi stabil. Profil ketebalan seragam dan dalam batas kendali.'}
+                  </div>
+                </div>
+                <div>
+                  <strong className="block text-slate-800 font-bold mb-0.5">Tindakan Korektif (Jika Ada):</strong>
+                  <div className="p-1.5 border border-slate-400 rounded bg-slate-50 min-h-[34px] text-slate-900 font-medium">
+                    {report.correctiveAction || 'Tidak ada tindakan korektif khusus. Lanjut transfer ke proses stasiun lanjutan.'}
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          {/* Signature Columns */}
+          <tr className="text-center font-sans">
+            <td className="w-1/3 p-2.5 border-r border-black align-top h-28 flex flex-col justify-between">
+              <div>
+                <div className="text-[9px] font-bold uppercase text-slate-700">Dibuat Oleh (Operator)</div>
+                <div className="text-[8px] text-slate-500">Operasional Produksi Extruder</div>
+              </div>
+              <div className="mt-8">
+                <div className="border-b border-black w-36 mx-auto" />
+                <div className="font-bold text-[9.5px] uppercase mt-1">{report.header.operatorName || 'Operator Mesin'}</div>
+                <div className="text-[8px] text-slate-600">Tgl: {report.header.inspectionDate}</div>
+              </div>
+            </td>
+
+            <td className="w-1/3 p-2.5 border-r border-black align-top h-28 flex flex-col justify-between">
+              <div>
+                <div className="text-[9px] font-bold uppercase text-slate-700">Diperiksa Oleh (Inspector QC)</div>
+                <div className="text-[8px] text-slate-500">Inspector Quality PT Camiloplas Jaya Makmur</div>
+              </div>
+              <div className="mt-8">
+                <div className="border-b border-black w-36 mx-auto" />
+                <div className="font-bold text-[9.5px] uppercase mt-1 text-blue-950">{report.header.inspectorName || 'QC Inspector'}</div>
+                <div className="text-[8px] text-slate-600">Tgl: {report.header.inspectionDate}</div>
+              </div>
+            </td>
+
+            <td className="w-1/3 p-2.5 align-top h-28 flex flex-col justify-between">
+              <div>
+                <div className="text-[9px] font-bold uppercase text-slate-700">Disetujui Oleh (QA / QC Lead)</div>
+                <div className="text-[8px] text-slate-500">Quality Assurance Section Head</div>
+              </div>
+              <div className="mt-8">
+                <div className="border-b border-black w-36 mx-auto" />
+                <div className="font-bold text-[9.5px] uppercase mt-1">{report.approvedBy || 'Hendra Gunawan (QC Lead)'}</div>
+                <div className="text-[8px] text-slate-600">Tgl: {report.header.inspectionDate}</div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Footer System Stamp */}
+      <div className="flex justify-between items-center text-[8px] text-slate-600 mt-2 px-1 font-mono font-semibold">
+        <span>PT CAMILOPLAS JAYA MAKMUR · INSPECTOR QUALITY SYSTEM · ISO 9001 COMPLIANT</span>
+        <span>Dicetak otomatis: {new Date().toLocaleString('id-ID')}</span>
+        <span>Lembar 1 dari 1 (Dokumen Sah)</span>
       </div>
     </div>
   );

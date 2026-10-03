@@ -93,19 +93,3 @@ export function exportReportToCSV(report: QCReport) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
-/**
- * Downloads report as formatted JSON
- */
-export function exportReportToJSON(report: QCReport) {
-  const jsonStr = JSON.stringify(report, null, 2);
-  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `QC_Report_${report.header.reportNumber || 'QC'}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}

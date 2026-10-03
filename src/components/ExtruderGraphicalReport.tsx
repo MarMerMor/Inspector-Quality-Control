@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { DimensionSampleRow, ProductionSummary } from '../types/qc';
+import { DimensionSampleRow, ProductionSummary, ProductionDestination } from '../types/qc';
+import { formatMeasurement } from '../utils/formatUtils';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -30,6 +31,7 @@ import {
 interface Props {
   dimensions: DimensionSampleRow[];
   production?: ProductionSummary;
+  destinationPlant?: ProductionDestination;
   nominal?: number;
   upperSpecLimit?: number;
   lowerSpecLimit?: number;
@@ -40,6 +42,7 @@ interface Props {
 export const ExtruderGraphicalReport: React.FC<Props> = ({
   dimensions,
   production,
+  destinationPlant,
   partName,
   reportNumber,
 }) => {
@@ -290,13 +293,13 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
             <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-2">
               <span className="text-slate-500">Gauge Band (Delta Tebal):</span>
               <strong className="font-mono text-slate-900">
-                {widthThickness?.range !== null ? `±${(widthThickness.range / 2).toFixed(3)} mm` : '-'}
+                {widthThickness?.range !== null ? `±${formatMeasurement(widthThickness.range / 2)} mm` : '-'}
               </strong>
             </div>
             <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-2">
               <span className="text-slate-500">Tujuan Produksi:</span>
-              <span className="text-blue-700 font-semibold flex items-center gap-1">
-                <span>Proses 2</span>
+              <span className="text-blue-700 font-bold flex items-center gap-1">
+                <span>{destinationPlant === 'PROSES_2_BOLANG' ? 'Proses 2 Pabrik Bolang' : 'Proses 2 Pabrik Jati'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -323,7 +326,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
             <div className="text-right text-[11px]">
               <span className="text-slate-500">Nominal: </span>
               <strong className="font-mono text-slate-800">
-                {widthThickness?.nominal.toFixed(3)} mm
+                {formatMeasurement(widthThickness?.nominal)} mm
               </strong>
               <span className="text-slate-400"> (±0.03 mm)</span>
             </div>
@@ -334,25 +337,25 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Rata-rata</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {widthThickness?.mean !== null ? `${widthThickness.mean.toFixed(3)}` : '-'}
+                {widthThickness?.mean !== null ? `${formatMeasurement(widthThickness.mean)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Min</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {widthThickness?.min !== null ? `${widthThickness.min.toFixed(3)}` : '-'}
+                {widthThickness?.min !== null ? `${formatMeasurement(widthThickness.min)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Max</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {widthThickness?.max !== null ? `${widthThickness.max.toFixed(3)}` : '-'}
+                {widthThickness?.max !== null ? `${formatMeasurement(widthThickness.max)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Range (Max-Min)</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-blue-600">
-                {widthThickness?.range !== null ? `${widthThickness.range.toFixed(3)}` : '-'}
+                {widthThickness?.range !== null ? `${formatMeasurement(widthThickness.range)}` : '-'}
               </div>
             </div>
           </div>
@@ -374,7 +377,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                 <YAxis
                   domain={widthYDomain}
                   tick={{ fontSize: 11, fill: '#64748b' }}
-                  tickFormatter={(val) => val.toFixed(3)}
+                  tickFormatter={(val) => formatMeasurement(val)}
                   width={52}
                 />
                 <Tooltip
@@ -389,13 +392,13 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                           <div className="flex justify-between">
                             <span className="text-slate-400">Tebal Aktual:</span>
                             <span className="font-bold font-mono text-blue-300">
-                              {data.actual !== null ? `${data.actual.toFixed(3)} mm` : '-'}
+                              {data.actual !== null ? `${formatMeasurement(data.actual)} mm` : '-'}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Target Nominal:</span>
                             <span className="font-mono text-emerald-400">
-                              {data.nominal.toFixed(3)} mm
+                              {formatMeasurement(data.nominal)} mm
                             </span>
                           </div>
                           <div className="flex justify-between">
@@ -408,7 +411,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                               }`}
                             >
                               {data.delta !== null
-                                ? `${data.delta >= 0 ? '+' : ''}${data.delta.toFixed(3)} mm`
+                                ? `${data.delta >= 0 ? '+' : ''}${formatMeasurement(data.delta)} mm`
                                 : '-'}
                             </span>
                           </div>
@@ -439,7 +442,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       strokeDasharray="4 4"
                       strokeWidth={1.5}
                       label={{
-                        value: `USL ${widthThickness.upperSpecLimit.toFixed(3)}`,
+                        value: `USL ${formatMeasurement(widthThickness.upperSpecLimit)}`,
                         fill: '#ef4444',
                         fontSize: 10,
                         position: 'top',
@@ -450,7 +453,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       stroke="#10b981"
                       strokeWidth={1.5}
                       label={{
-                        value: `Nominal ${widthThickness.nominal.toFixed(3)}`,
+                        value: `Nominal ${formatMeasurement(widthThickness.nominal)}`,
                         fill: '#10b981',
                         fontSize: 10,
                         position: 'insideBottomRight',
@@ -462,7 +465,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       strokeDasharray="4 4"
                       strokeWidth={1.5}
                       label={{
-                        value: `LSL ${widthThickness.lowerSpecLimit.toFixed(3)}`,
+                        value: `LSL ${formatMeasurement(widthThickness.lowerSpecLimit)}`,
                         fill: '#ef4444',
                         fontSize: 10,
                         position: 'bottom',
@@ -537,7 +540,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
             <div className="text-right text-[11px]">
               <span className="text-slate-500">Nominal: </span>
               <strong className="font-mono text-slate-800">
-                {lengthThickness?.nominal.toFixed(3) || '0.500'} mm
+                {formatMeasurement(lengthThickness?.nominal || widthThickness?.nominal)} mm
               </strong>
               <span className="text-slate-400"> (±0.03 mm)</span>
             </div>
@@ -548,25 +551,25 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Rata-rata</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {lengthThickness && lengthThickness.mean !== null ? `${lengthThickness.mean.toFixed(3)}` : '-'}
+                {lengthThickness && lengthThickness.mean !== null ? `${formatMeasurement(lengthThickness.mean)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Min</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {lengthThickness && lengthThickness.min !== null ? `${lengthThickness.min.toFixed(3)}` : '-'}
+                {lengthThickness && lengthThickness.min !== null ? `${formatMeasurement(lengthThickness.min)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Max</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-slate-800">
-                {lengthThickness && lengthThickness.max !== null ? `${lengthThickness.max.toFixed(3)}` : '-'}
+                {lengthThickness && lengthThickness.max !== null ? `${formatMeasurement(lengthThickness.max)}` : '-'}
               </div>
             </div>
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
               <div className="text-[10px] text-slate-500 font-medium">Stabilitas (Range)</div>
               <div className="text-xs sm:text-sm font-bold font-mono text-indigo-600">
-                {lengthThickness && lengthThickness.range !== null ? `${lengthThickness.range.toFixed(3)}` : '-'}
+                {lengthThickness && lengthThickness.range !== null ? `${formatMeasurement(lengthThickness.range)}` : '-'}
               </div>
             </div>
           </div>
@@ -588,7 +591,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                 <YAxis
                   domain={lengthYDomain}
                   tick={{ fontSize: 11, fill: '#64748b' }}
-                  tickFormatter={(val) => val.toFixed(3)}
+                  tickFormatter={(val) => formatMeasurement(val)}
                   width={52}
                 />
                 <Tooltip
@@ -603,13 +606,13 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                           <div className="flex justify-between">
                             <span className="text-slate-400">Tebal Aktual:</span>
                             <span className="font-bold font-mono text-indigo-300">
-                              {data.actual !== null ? `${data.actual.toFixed(3)} mm` : '-'}
+                              {data.actual !== null ? `${formatMeasurement(data.actual)} mm` : '-'}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Target Nominal:</span>
                             <span className="font-mono text-emerald-400">
-                              {data.nominal.toFixed(3)} mm
+                              {formatMeasurement(data.nominal)} mm
                             </span>
                           </div>
                           <div className="flex justify-between">
@@ -622,7 +625,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                               }`}
                             >
                               {data.delta !== null
-                                ? `${data.delta >= 0 ? '+' : ''}${data.delta.toFixed(3)} mm`
+                                ? `${data.delta >= 0 ? '+' : ''}${formatMeasurement(data.delta)} mm`
                                 : '-'}
                             </span>
                           </div>
@@ -652,7 +655,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       strokeDasharray="4 4"
                       strokeWidth={1.5}
                       label={{
-                        value: `USL ${lengthThickness.upperSpecLimit.toFixed(3)}`,
+                        value: `USL ${formatMeasurement(lengthThickness.upperSpecLimit)}`,
                         fill: '#ef4444',
                         fontSize: 10,
                         position: 'top',
@@ -663,7 +666,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       stroke="#10b981"
                       strokeWidth={1.5}
                       label={{
-                        value: `Nominal ${lengthThickness.nominal.toFixed(3)}`,
+                        value: `Nominal ${formatMeasurement(lengthThickness.nominal)}`,
                         fill: '#10b981',
                         fontSize: 10,
                         position: 'insideBottomRight',
@@ -675,7 +678,7 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
                       strokeDasharray="4 4"
                       strokeWidth={1.5}
                       label={{
-                        value: `LSL ${lengthThickness.lowerSpecLimit.toFixed(3)}`,
+                        value: `LSL ${formatMeasurement(lengthThickness.lowerSpecLimit)}`,
                         fill: '#ef4444',
                         fontSize: 10,
                         position: 'bottom',
@@ -893,7 +896,12 @@ export const ExtruderGraphicalReport: React.FC<Props> = ({
 
               <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
                 <span>Lebar: {sheetWidthDim?.samples[0] || '650.0'} mm</span>
-                <span>Panjang Roll: 200 Meter</span>
+                <span>
+                  Panjang Roll (Est. 100kg):{' '}
+                  <strong className="text-blue-300 font-mono">
+                    {Math.round(100000 / ((sheetWidthDim?.samples[0] || 650) * (widthThickness?.mean || 0.5) * 1.045))} m
+                  </strong>
+                </span>
                 <span className="text-emerald-400 font-semibold">Tebal Rata2: {widthThickness?.mean || 0.5} mm</span>
               </div>
             </div>

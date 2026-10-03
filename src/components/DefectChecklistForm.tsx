@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Sliders,
 } from 'lucide-react';
+import { CleanNumberInput } from './common/CleanNumberInput';
 
 interface Props {
   defects: DefectItem[];
@@ -129,15 +130,12 @@ export const DefectChecklistForm: React.FC<Props> = ({
             <CheckCircle className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="my-2">
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              pattern="[0-9]*"
+            <CleanNumberInput
               value={production.totalOk}
-              onChange={(e) =>
-                onProductionChange({ totalOk: parseInt(e.target.value, 10) || 0 })
-              }
+              onChangeValue={(val) => onProductionChange({ totalOk: val })}
+              allowDecimals={false}
+              min={0}
+              placeholder="0"
               className="w-full text-2xl font-black font-mono text-emerald-950 bg-transparent border-b border-emerald-300 focus:outline-none focus:border-emerald-600 py-1"
             />
           </div>
@@ -189,15 +187,12 @@ export const DefectChecklistForm: React.FC<Props> = ({
             <RotateCcw className="w-4 h-4 text-amber-600" />
           </div>
           <div className="my-2">
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              pattern="[0-9]*"
+            <CleanNumberInput
               value={production.totalRework}
-              onChange={(e) =>
-                onProductionChange({ totalRework: parseInt(e.target.value, 10) || 0 })
-              }
+              onChangeValue={(val) => onProductionChange({ totalRework: val })}
+              allowDecimals={false}
+              min={0}
+              placeholder="0"
               className="w-full text-2xl font-black font-mono text-amber-950 bg-transparent border-b border-amber-300 focus:outline-none focus:border-amber-600 py-1"
             />
           </div>
@@ -303,32 +298,32 @@ export const DefectChecklistForm: React.FC<Props> = ({
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-slate-600">
             <span>Peringatan:</span>
-            <input
-              type="number"
-              step="0.1"
-              inputMode="decimal"
+            <CleanNumberInput
               value={production.rejectionThresholdWarn}
-              onChange={(e) =>
+              onChangeValue={(val) =>
                 onProductionChange({
-                  rejectionThresholdWarn: parseFloat(e.target.value) || 1.5,
+                  rejectionThresholdWarn: val,
                 })
               }
+              allowDecimals={true}
+              min={0}
+              placeholder="1.5"
               className="w-14 px-1.5 py-1 min-h-[34px] bg-white border border-slate-200 rounded-lg text-center font-mono font-bold"
             />
             <span>%</span>
           </label>
           <label className="flex items-center gap-1.5 text-slate-600">
             <span>Tolak:</span>
-            <input
-              type="number"
-              step="0.1"
-              inputMode="decimal"
+            <CleanNumberInput
               value={production.rejectionThresholdFail}
-              onChange={(e) =>
+              onChangeValue={(val) =>
                 onProductionChange({
-                  rejectionThresholdFail: parseFloat(e.target.value) || 3.5,
+                  rejectionThresholdFail: val,
                 })
               }
+              allowDecimals={true}
+              min={0}
+              placeholder="3.5"
               className="w-14 px-1.5 py-1 min-h-[34px] bg-white border border-slate-200 rounded-lg text-center font-mono font-bold"
             />
             <span>%</span>
@@ -394,15 +389,12 @@ export const DefectChecklistForm: React.FC<Props> = ({
                       <Minus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
 
-                    <input
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
+                    <CleanNumberInput
                       value={defect.count}
-                      onChange={(e) =>
-                        handleDefectDirectCount(defect.id, parseInt(e.target.value, 10) || 0)
-                      }
+                      onChangeValue={(val) => handleDefectDirectCount(defect.id, val)}
+                      allowDecimals={false}
+                      min={0}
+                      placeholder="0"
                       className="w-14 h-10 sm:w-12 sm:h-8 text-center font-mono font-black text-base sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
                     />
 
