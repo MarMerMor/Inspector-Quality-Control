@@ -1,23 +1,61 @@
-import React from 'react';
-import { ProductionSummary, ProductionDestination } from '../types/qc';
-import { CheckCircle2, XCircle, AlertTriangle, Layers, ArrowRight, RotateCcw, MapPin, Building2 } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  ProductionSummary,
+  ProductionDestination,
+  AuthUser,
+  AdminOverrideRecord,
+  InspectionStatus,
+} from '../types/qc';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Layers,
+  ArrowRight,
+  RotateCcw,
+  MapPin,
+  Building2,
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  Unlock,
+  FileCheck,
+  Sparkles,
+} from 'lucide-react';
 import { CleanNumberInput } from './common/CleanNumberInput';
 
 interface Props {
   production: ProductionSummary;
   totalRollWeightKg?: number;
   destinationPlant?: ProductionDestination;
+  currentUser?: AuthUser | null;
   onDestinationChange?: (destination: ProductionDestination) => void;
   onChange: (updated: Partial<ProductionSummary>) => void;
+  onAdminOverrideStatus?: (override: AdminOverrideRecord, newStatus: InspectionStatus) => void;
+  onResetAdminOverride?: () => void;
 }
 
 export const RollProductionForm: React.FC<Props> = ({
   production,
   totalRollWeightKg = 120,
   destinationPlant = 'PROSES_2_JATI',
+  currentUser,
   onDestinationChange,
   onChange,
+  onAdminOverrideStatus,
+  onResetAdminOverride,
 }) => {
+  const isAdmin =
+    currentUser?.role === 'ADMIN_QC' ||
+    currentUser?.username?.toLowerCase() === 'admin qc' ||
+    currentUser?.username?.toLowerCase() === 'adminqc' ||
+    currentUser?.username?.toLowerCase() === 'admin';
+
+  const [selectedReason, setSelectedReason] = useState<string>(
+    'Dispensasi penggunaan internal Proses 2 Jati dengan penyetelan parameter pemangkasan tepi.'
+  );
+  const [customReason, setCustomReason] = useState<string>('');
+  const [isOverriding, setIsOverriding] = useState<boolean>(false);
   const handleOkChange = (val: number) => {
     const safe = Math.max(0, isNaN(val) ? 0 : val);
     onChange({ totalOk: safe });
@@ -316,6 +354,209 @@ export const RollProductionForm: React.FC<Props> = ({
             </strong>
           </div>
         </div>
+      </div>
+
+      {/* Bagian Status Mutu Roll & Otorisasi Pengubahan Status (Admin QC vs QC Standar) */}
+      <div className="mt-5 pt-5 border-t border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              <span>Status Roll Hasil Inspeksi:</span>
+            </span>
+            {production.adminOverride?.isOverridden ? (
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border-2 border-emerald-400 flex items-center gap-1 shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>LULUS INSPEKSI (DISPENSASI ADMIN QC)</span>
+              </span>
+            ) : production.status === 'PASS' ? (
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>LULUS INSPEKSI (PASS)</span>
+              </span>
+            ) : production.status === 'CONDITIONAL_PASS' ? (
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>LULUS DENGAN SYARAT (CONDITIONAL)</span>
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1">
+                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>DITOLAK / ROLL HOLD (REJECT)</span>
+              </span>
+            )}
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+            <span>Hak Akses Saat Ini:</span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${isAdmin ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-slate-100 text-slate-700 border border-slate-300'}`}>
+              {isAdmin ? '👑 Admin QC (Hak Penuh)' : `${currentUser?.username || 'QC'} (Inspeksi Standar)`}
+            </span>
+          </div>
+        </div>
+
+        {/* Kondisi 1: Status Roll sudah di-override oleh Admin QC */}
+        {production.adminOverride?.isOverridden && (
+          <div className="p-4 rounded-xl bg-emerald-50/80 border-2 border-emerald-400 text-emerald-950 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-emerald-600" />
+                <span className="text-xs font-black uppercase text-emerald-900">
+                  Dispensasi Mutu Khusus Diterbitkan oleh Admin QC
+                </span>
+              </div>
+              <span className="text-[11px] font-mono font-semibold text-slate-600">
+                Waktu: {production.adminOverride.overriddenAt}
+              </span>
+            </div>
+            <div className="text-xs bg-white p-2.5 rounded-lg border border-emerald-200">
+              <div className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">Justifikasi Resmi:</div>
+              <p className="font-semibold text-slate-800 italic">"{production.adminOverride.justification}"</p>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Disetujui oleh: <strong>{production.adminOverride.overriddenBy}</strong> · PT Camiloplas Jaya Makmur
+              </div>
+            </div>
+            {isAdmin && onResetAdminOverride && (
+              <div className="pt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={onResetAdminOverride}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-white hover:bg-rose-50 border border-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Batalkan Dispensasi (Kembalikan Status Roll ke REJECT)</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kondisi 2: Status Roll Ditolak (REJECT) dan Login sebagai Admin QC */}
+        {!production.adminOverride?.isOverridden && production.status === 'REJECT' && isAdmin && (
+          <div className="p-4 rounded-xl bg-amber-50/90 border-2 border-amber-400 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-500 text-white shrink-0 mt-0.5">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                  Otorisasi Admin QC: Ubah Status Roll dari Ditolak (REJECT) Menjadi Lulus Inspeksi
+                </h4>
+                <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
+                  Roll ini berstatus <strong>Ditolak (REJECT)</strong> karena roll hold atau toleransi dimensi. Sebagai <strong>Admin QC</strong>, Anda memiliki hak khusus untuk meluluskan roll ini dengan justifikasi resmi yang tercatat di laporan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                  Pilih Alasan Dispensasi (Concession Note):
+                </label>
+                <select
+                  value={selectedReason}
+                  onChange={(e) => setSelectedReason(e.target.value)}
+                  className="w-full text-xs p-2 bg-white border border-amber-300 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="Dispensasi penggunaan internal Proses 2 Jati dengan penyetelan parameter pemangkasan tepi.">
+                    Dispensasi internal Proses 2 Jati dengan pemangkasan tepi (Edge-trimming disesuaikan)
+                  </option>
+                  <option value="Dispensasi pengiriman transfer ke Pabrik Bolang untuk stasiun thermoforming sekunder.">
+                    Dispensasi pengiriman transfer ke Pabrik Bolang (stasiun sekunder)
+                  </option>
+                  <option value="Deviasi ketebalan bersifat lokal/minor dan telah diverifikasi aman untuk proses lanjutan.">
+                    Deviasi ketebalan lokal/minor - diverifikasi aman untuk proses lanjutan
+                  </option>
+                  <option value="Lot sampel uji coba resin baru (Trial Lot) - Diterima dengan pengawasan in-line ketat.">
+                    Lot sampel uji coba resin (Trial Lot) - diterima dengan pengawasan in-line
+                  </option>
+                  <option value="Lainnya (Tuliskan catatan khusus di bawah)">
+                    Lainnya (Tuliskan justifikasi khusus sendiri)
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                  placeholder="Tambahkan catatan spesifik persetujuan Admin QC (opsional)..."
+                  className="w-full text-xs px-3 py-2 bg-white border border-amber-300 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-amber-900 font-semibold">
+                  Otorisator: <strong>{currentUser?.name || 'Admin QC'}</strong>
+                </span>
+
+                <button
+                  type="button"
+                  disabled={isOverriding}
+                  onClick={() => {
+                    if (!onAdminOverrideStatus) return;
+                    setIsOverriding(true);
+                    const finalReason = customReason.trim()
+                      ? `${selectedReason}. Catatan: ${customReason.trim()}`
+                      : selectedReason;
+
+                    const overrideRecord: AdminOverrideRecord = {
+                      isOverridden: true,
+                      originalStatus: 'REJECT',
+                      overriddenStatus: 'PASS',
+                      justification: finalReason,
+                      overriddenBy: currentUser?.name || 'Hendra Gunawan, S.T. (Admin QC)',
+                      overriddenAt: new Date().toLocaleString('id-ID', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }),
+                    };
+
+                    onAdminOverrideStatus(overrideRecord, 'PASS');
+                    setIsOverriding(false);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <FileCheck className="w-4 h-4" />
+                  <span>Ubah Status Roll Menjadi Lulus Inspeksi (PASS)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Kondisi 3: Status Roll Ditolak (REJECT) tapi login sebagai QC standar (qc1, qc2, qc3) */}
+        {!production.adminOverride?.isOverridden && production.status === 'REJECT' && !isAdmin && (
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-300 flex items-start gap-3">
+            <Lock className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <span>Status Roll: Ditolak (REJECT)</span>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                  Hak Ubah Terkunci
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                Pengguna <strong>{currentUser?.username || 'Petugas QC'}</strong> ({currentUser?.roleLabel || 'Inspector Quality'}) tidak memiliki wewenang untuk mengubah status roll yang ditolak.
+              </p>
+              <p className="text-[11px] text-amber-800 font-semibold">
+                🔒 Sesuai prosedur mutu PT Camiloplas Jaya Makmur, hanya akun <strong>Admin Qc</strong> yang berhak mengubah status roll dari ditolak menjadi lulus inspeksi.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Kondisi 4: Roll Lulus Inspeksi Normal */}
+        {!production.adminOverride?.isOverridden && production.status !== 'REJECT' && (
+          <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-900">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Seluruh toleransi dimensi dan roll hold dalam batas kontrol aman PT Camiloplas Jaya Makmur.</span>
+            </div>
+            <span className="font-mono text-[11px] font-bold text-emerald-700">Memenuhi ISO 9001</span>
+          </div>
+        )}
       </div>
     </div>
   );

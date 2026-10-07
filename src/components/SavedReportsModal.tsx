@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { QCReport, ShiftType } from '../types/qc';
+import { QCReport, ShiftType, AuthUser } from '../types/qc';
 import {
   SavedReportItem,
   deleteReportFromStorage,
@@ -24,6 +24,8 @@ import {
   Wrench,
   RotateCcw,
   AlertTriangle,
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface Props {
@@ -31,6 +33,7 @@ interface Props {
   onClose: () => void;
   savedItems: SavedReportItem[];
   currentReportId: string;
+  currentUser?: AuthUser | null;
   onLoadReport: (report: QCReport) => void;
   onUseAsTemplate: (report: QCReport, newShift?: ShiftType) => void;
   onRefreshSavedList: () => void;
@@ -42,11 +45,17 @@ export const SavedReportsModal: React.FC<Props> = ({
   onClose,
   savedItems,
   currentReportId,
+  currentUser,
   onLoadReport,
   onUseAsTemplate,
   onRefreshSavedList,
   onQuickPrint,
 }) => {
+  const isAdmin =
+    currentUser?.role === 'ADMIN_QC' ||
+    currentUser?.username?.toLowerCase() === 'admin qc' ||
+    currentUser?.username?.toLowerCase() === 'adminqc';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'TEMPLATES' | 'EXTRUDER' | 'PROSES_2'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PASS' | 'CONDITIONAL_PASS' | 'REJECT'>('ALL');
@@ -83,24 +92,34 @@ export const SavedReportsModal: React.FC<Props> = ({
   if (!isOpen) return null;
 
   const handleDeleteRequest = (id: string, name: string) => {
+    if (!isAdmin) {
+      setDeleteToast('Akses Dibatasi: Hanya pengguna "Admin Qc" yang berhak menghapus laporan.');
+      setTimeout(() => setDeleteToast(null), 4000);
+      return;
+    }
     setItemToDelete({ id, name });
   };
 
   const handleConfirmDelete = () => {
-    if (!itemToDelete) return;
+    if (!isAdmin || !itemToDelete) return;
     const targetName = itemToDelete.name;
     deleteReportFromStorage(itemToDelete.id);
     setItemToDelete(null);
     onRefreshSavedList();
-    setDeleteToast(`Laporan/template "${targetName}" berhasil dihapus permanen dari penyimpanan.`);
+    setDeleteToast(`Laporan/template "${targetName}" berhasil dihapus permanen oleh Admin QC.`);
     setTimeout(() => setDeleteToast(null), 4000);
   };
 
   const handleConfirmClearAll = () => {
+    if (!isAdmin) {
+      setDeleteToast('Akses Dibatasi: Hanya pengguna "Admin Qc" yang berhak mengosongkan semua laporan.');
+      setTimeout(() => setDeleteToast(null), 4000);
+      return;
+    }
     clearAllSavedReportsFromStorage();
     setIsConfirmClearAllOpen(false);
     onRefreshSavedList();
-    setDeleteToast('Semua laporan berhasil dikosongkan dari penyimpanan.');
+    setDeleteToast('Semua laporan berhasil dikosongkan dari penyimpanan oleh Admin QC.');
     setTimeout(() => setDeleteToast(null), 4000);
   };
 
@@ -126,6 +145,15 @@ export const SavedReportsModal: React.FC<Props> = ({
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                   {savedItems.length} Tersimpan
                 </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                    isAdmin
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {isAdmin ? '🛡️ Otoritas Penuh: Admin QC' : '🔒 Hak Hapus Terkunci (Inspector)'}
+                </span>
               </div>
               <p className="text-xs text-slate-400">
                 Pilih laporan untuk dibuka kembali, atau gunakan sebagai template produksi baru berulang kali.
@@ -135,15 +163,25 @@ export const SavedReportsModal: React.FC<Props> = ({
 
           <div className="flex items-center gap-2">
             {savedItems.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setIsConfirmClearAllOpen(true)}
-                title="Hapus semua laporan tersimpan"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 rounded-lg border border-rose-800/80 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                <span>Hapus Semua</span>
-              </button>
+              isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmClearAllOpen(true)}
+                  title="Hapus semua laporan tersimpan (Otoritas Admin QC)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 rounded-lg border border-rose-800/80 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Hapus Semua</span>
+                </button>
+              ) : (
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-slate-800/80 text-slate-400 rounded-lg border border-slate-700 select-none cursor-not-allowed"
+                  title="Hanya Admin QC yang berhak mengosongkan semua laporan"
+                >
+                  <Lock className="w-3 h-3 text-slate-500" />
+                  <span>Hapus (Khusus Admin QC)</span>
+                </div>
+              )
             ) : (
               <button
                 type="button"
@@ -487,15 +525,29 @@ export const SavedReportsModal: React.FC<Props> = ({
                           <FileSpreadsheet className="w-4 h-4" />
                         </button>
 
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRequest(item.id, item.templateLabel || rep.header.reportNumber)}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Hapus dari penyimpanan"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Delete - Enabled for Admin QC, Locked for Standard QC */}
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRequest(item.id, item.templateLabel || rep.header.reportNumber)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Hapus dari penyimpanan (Otoritas Admin QC)"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteToast('Akses Dibatasi: Hanya pengguna "Admin Qc" yang berhak menghapus laporan tersimpan.');
+                              setTimeout(() => setDeleteToast(null), 4000);
+                            }}
+                            className="p-1.5 text-slate-300 hover:text-slate-500 rounded-lg transition-colors cursor-not-allowed"
+                            title="🔒 Hak Hapus Terkunci (Khusus Admin QC)"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

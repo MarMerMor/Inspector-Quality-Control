@@ -1,5 +1,5 @@
 import React from 'react';
-import { QCReport, InspectionStatus } from '../types/qc';
+import { QCReport, InspectionStatus, AuthUser, AdminOverrideRecord } from '../types/qc';
 import {
   FileText,
   FileSpreadsheet,
@@ -16,9 +16,11 @@ import {
 } from 'lucide-react';
 import { exportReportToCSV } from '../utils/exportUtils';
 import { AIExtruderDiagnosticPanel } from './AIExtruderDiagnosticPanel';
+import { AdminStatusOverrideSection } from './AdminStatusOverrideSection';
 
 interface Props {
   report: QCReport;
+  currentUser?: AuthUser | null;
   onNotesChange: (notes: string, correctiveAction: string) => void;
   onApprovalChange: (approvedBy: string) => void;
   onPrint: () => void;
@@ -26,10 +28,13 @@ interface Props {
   onOpenSavedListModal: () => void;
   onDuplicateForNewShift: () => void;
   onApplyStatus?: (status: InspectionStatus) => void;
+  onAdminOverrideStatus?: (override: AdminOverrideRecord, newStatus: InspectionStatus) => void;
+  onResetAdminOverride?: () => void;
 }
 
 export const QCReportSummary: React.FC<Props> = ({
   report,
+  currentUser,
   onNotesChange,
   onApprovalChange,
   onPrint,
@@ -37,6 +42,8 @@ export const QCReportSummary: React.FC<Props> = ({
   onOpenSavedListModal,
   onDuplicateForNewShift,
   onApplyStatus,
+  onAdminOverrideStatus,
+  onResetAdminOverride,
 }) => {
   const getStatusIcon = () => {
     switch (report.production.status) {
@@ -109,6 +116,14 @@ export const QCReportSummary: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Special Roll Status Override & Concession Section (Admin QC vs Standard QC) */}
+      <AdminStatusOverrideSection
+        report={report}
+        currentUser={currentUser || null}
+        onAdminOverrideStatus={onAdminOverrideStatus || (() => {})}
+        onResetAdminOverride={onResetAdminOverride || (() => {})}
+      />
 
       {/* Notes & Corrective Actions */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 md:p-6">

@@ -4,6 +4,7 @@ import {
   InspectionStatus,
   MoldDieSetup,
   ProductionSummary,
+  AdminOverrideRecord,
 } from '../types/qc';
 
 /**
@@ -106,7 +107,8 @@ export function evaluateProductionSummary(
   warnThreshold: number = 1.5,
   failThreshold: number = 3.5,
   criticalDimensions: DimensionSampleRow[] = [],
-  moldSetup?: MoldDieSetup
+  moldSetup?: MoldDieSetup,
+  adminOverride?: AdminOverrideRecord
 ): ProductionSummary {
   const safeOk = Math.max(0, totalOk);
   const safeNg = Math.max(0, totalNg);
@@ -168,6 +170,14 @@ export function evaluateProductionSummary(
     }
   }
 
+  // 5. Admin QC Status Override (Special Concession Release)
+  if (adminOverride?.isOverridden && adminOverride.overriddenStatus === 'PASS') {
+    status = 'PASS';
+    reasons.unshift(
+      `[Dispensasi Admin QC] Status diloloskan oleh ${adminOverride.overriddenBy}. Alasan: "${adminOverride.justification}"`
+    );
+  }
+
   if (reasons.length === 0) {
     reasons.push('Semua parameter kualitas dalam toleransi yang diizinkan');
   }
@@ -183,5 +193,6 @@ export function evaluateProductionSummary(
     rejectionThresholdFail: failThreshold,
     status,
     statusReasons: reasons,
+    adminOverride,
   };
 }

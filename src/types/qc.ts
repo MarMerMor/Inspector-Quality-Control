@@ -6,6 +6,24 @@ export type ShiftType = 'SHIFT_1' | 'SHIFT_2' | 'SHIFT_3';
 
 export type InspectionStatus = 'PASS' | 'CONDITIONAL_PASS' | 'REJECT';
 
+export type UserRole = 'ADMIN_QC' | 'QC_INSPECTOR';
+
+export interface AuthUser {
+  username: string;
+  name: string;
+  role: UserRole;
+  roleLabel: string;
+}
+
+export interface AdminOverrideRecord {
+  isOverridden: boolean;
+  originalStatus: InspectionStatus;
+  overriddenStatus: InspectionStatus;
+  justification: string;
+  overriddenBy: string;
+  overriddenAt: string;
+}
+
 export interface HeaderMetadata {
   reportNumber: string; // e.g. QC-EXT-(DD/MM/YY)-(Shift)-(Nomor urut)
   inspectionDate: string;
@@ -68,6 +86,7 @@ export interface ProductionSummary {
   status: InspectionStatus;
   statusReasons: string[];
   destinationPlant?: ProductionDestination;
+  adminOverride?: AdminOverrideRecord;
 }
 
 export interface DimensionSampleRow {

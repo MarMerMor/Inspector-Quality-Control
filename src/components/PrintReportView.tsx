@@ -46,7 +46,8 @@ export const PrintReportView: React.FC<Props> = ({ report, isInteractivePreview 
   // Overall Verdict Calculation
   const allDimensionsInSpec = report.criticalDimensions.every((d) => d.isAllInSpec);
   const isRejectRateOk = report.production.rejectionRatePct <= report.production.rejectionThresholdFail;
-  const isOverallPass = allDimensionsInSpec && isRejectRateOk;
+  const isAdminOverridden = Boolean(report.production.adminOverride?.isOverridden);
+  const isOverallPass = report.production.status === 'PASS' || (allDimensionsInSpec && isRejectRateOk);
 
   // Active defects with count > 0
   const activeDefects = report.defects.filter((d) => d.count > 0);
@@ -582,21 +583,37 @@ export const PrintReportView: React.FC<Props> = ({ report, isInteractivePreview 
             <td colSpan={3} className="p-2.5 text-center">
               <div
                 className={`inline-block border-2 px-6 py-2 rounded-lg text-center font-black tracking-wider uppercase ${
-                  isOverallPass
+                  isAdminOverridden
+                    ? 'border-amber-700 bg-amber-50 text-amber-950'
+                    : isOverallPass
                     ? 'border-emerald-800 bg-emerald-50 text-emerald-950'
                     : 'border-rose-800 bg-rose-50 text-rose-950'
                 }`}
               >
                 <div className="text-sm">
-                  {isOverallPass
+                  {isAdminOverridden
+                    ? `✓ KEPUTUSAN: DILOLOSKAN DENGAN DISPENSASI ADMIN QC (TRANSFER KE ${targetPlantLabel.toUpperCase()})`
+                    : isOverallPass
                     ? `✓ KEPUTUSAN: LOT LOLOS INSPEKSI (RELEASED TO ${targetPlantLabel.toUpperCase()})`
                     : '✗ KEPUTUSAN: LOT DITAHAN (ON HOLD / RE-INSPECT)'}
                 </div>
                 <div className="text-[8.5px] font-semibold normal-case mt-0.5 text-slate-700">
-                  {isOverallPass
+                  {isAdminOverridden
+                    ? `Lot diloloskan atas dasar persetujuan pelepasan mutu khusus (Special Concession) oleh Admin QC. Justifikasi: "${report.production.adminOverride?.justification}"`
+                    : isOverallPass
                     ? `Seluruh dimensi kritis dan spesifikasi toleransi memenuhi standar mutu PT Camiloplas Jaya Makmur (ISO 9001:2015).`
                     : 'Terdapat dimensi atau tingkat reject yang melampaui batas toleransi yang diizinkan.'}
                 </div>
+
+                {isAdminOverridden && report.production.adminOverride && (
+                  <div className="mt-1.5 pt-1 border-t border-amber-300 text-[8px] text-amber-900 font-mono flex items-center justify-center gap-4">
+                    <span>Otorisasi: <strong>{report.production.adminOverride.overriddenBy}</strong></span>
+                    <span>·</span>
+                    <span>Waktu: <strong>{report.production.adminOverride.overriddenAt}</strong></span>
+                    <span>·</span>
+                    <span>Status Asli: <strong className="text-rose-700">{report.production.adminOverride.originalStatus}</strong></span>
+                  </div>
+                )}
               </div>
             </td>
           </tr>

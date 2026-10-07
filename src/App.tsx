@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { QCReport, DefectItem, DimensionSampleRow, ProductionSummary, ShiftType } from './types/qc';
+import {
+  QCReport,
+  DefectItem,
+  DimensionSampleRow,
+  ProductionSummary,
+  ShiftType,
+  AuthUser,
+  AdminOverrideRecord,
+  InspectionStatus,
+} from './types/qc';
 import {
   createDefaultExtruderReport,
   createProses2Report,
@@ -47,12 +56,12 @@ import {
 import { exportReportToCSV } from './utils/exportUtils';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<{ username: string; name: string; role?: string } | null>(() => {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
       const saved = localStorage.getItem('QMOLD_QC_AUTH_USER');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed?.username?.toLowerCase() === 'qc1') {
+        if (parsed?.username && parsed?.role) {
           return parsed;
         }
       }
@@ -165,12 +174,14 @@ export default function App() {
       warnThresh,
       failThresh,
       dimensions,
-      mold
+      mold,
+      currentProd.adminOverride
     );
 
     return {
       ...evaluated,
       destinationPlant: currentProd.destinationPlant,
+      adminOverride: currentProd.adminOverride,
     };
   };
 
@@ -300,6 +311,54 @@ export default function App() {
     showToast(`Status laporan diperbarui menjadi ${status} sesuai rekomendasi AI.`);
   };
 
+  // Admin QC Status Override (Change roll status from REJECT to PASS)
+  const handleAdminOverrideStatus = (override: AdminOverrideRecord, newStatus: InspectionStatus) => {
+    setReport((prev) => {
+      const updatedProd: ProductionSummary = {
+        ...prev.production,
+        status: newStatus,
+        adminOverride: override,
+        statusReasons: [
+          `[Dispensasi Admin QC] Status diloloskan oleh ${override.overriddenBy}. Alasan: "${override.justification}"`,
+          ...prev.production.statusReasons.filter((r) => !r.includes('[Dispensasi Admin QC]')),
+        ],
+      };
+      return {
+        ...prev,
+        production: updatedProd,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    showToast(`Status roll berhasil diubah menjadi ${newStatus} dengan dispensasi khusus Admin QC.`);
+  };
+
+  // Reset Admin QC override back to automatic evaluation
+  const handleResetAdminOverride = () => {
+    setReport((prev) => {
+      const baseEvaluation = evaluateProductionSummary(
+        prev.production.totalOk,
+        prev.production.totalNg,
+        prev.production.totalRework,
+        prev.production.rejectionThresholdWarn,
+        prev.production.rejectionThresholdFail,
+        prev.criticalDimensions,
+        prev.moldSetup,
+        undefined
+      );
+      const updatedProd: ProductionSummary = {
+        ...baseEvaluation,
+        destinationPlant: prev.production.destinationPlant,
+        adminOverride: undefined,
+      };
+      return {
+        ...prev,
+        production: updatedProd,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    showToast('Dispensasi Admin QC dibatalkan. Status roll dikembalikan ke hasil evaluasi asli.');
+  };
+
   // Notes & corrective action change
   const handleNotesChange = (notes: string, correctiveAction: string) => {
     setReport((prev) => ({
@@ -349,6 +408,14 @@ export default function App() {
       <LoginModal
         onLoginSuccess={(user) => {
           setCurrentUser(user);
+          // Sync inspector name to logged in QC
+          setReport((prev) => ({
+            ...prev,
+            header: {
+              ...prev.header,
+              inspectorName: user.name,
+            },
+          }));
           showToast(`Login berhasil! Selamat bertugas, ${user.name}.`);
         }}
       />
@@ -357,7 +424,7 @@ export default function App() {
 
   return (
     <>
-      <div className="no-print min-h-screen bg-slate-100/70 text-slate-900 pb-28 sm:pb-16">
+      <div className="min-h-screen bg-slate-100/70 text-slate-900 pb-28 sm:pb-16">
         {/* Top Application Navbar */}
       <header className="no-print sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -663,7 +730,10 @@ export default function App() {
                 <div id="section-production">
                   <RollProductionForm
                     production={report.production}
+                    currentUser={currentUser}
                     onChange={handleProductionChange}
+                    onAdminOverrideStatus={handleAdminOverrideStatus}
+                    onResetAdminOverride={handleResetAdminOverride}
                   />
                 </div>
 
@@ -724,6 +794,7 @@ export default function App() {
             <div id="section-summary">
               <QCReportSummary
                 report={report}
+                currentUser={currentUser}
                 onNotesChange={handleNotesChange}
                 onApprovalChange={handleApprovalChange}
                 onPrint={handlePrint}
@@ -731,6 +802,8 @@ export default function App() {
                 onOpenSavedListModal={() => setIsSavedListModalOpen(true)}
                 onDuplicateForNewShift={handleDuplicateCurrentForNewShift}
                 onApplyStatus={handleApplyStatus}
+                onAdminOverrideStatus={handleAdminOverrideStatus}
+                onResetAdminOverride={handleResetAdminOverride}
               />
             </div>
           </div>
@@ -781,12 +854,16 @@ export default function App() {
           <div className="space-y-6">
             <QCReportSummary
               report={report}
+              currentUser={currentUser}
               onNotesChange={handleNotesChange}
               onApprovalChange={handleApprovalChange}
               onPrint={handlePrint}
               onOpenSaveModal={() => setIsSaveModalOpen(true)}
               onOpenSavedListModal={() => setIsSavedListModalOpen(true)}
               onDuplicateForNewShift={handleDuplicateCurrentForNewShift}
+              onApplyStatus={handleApplyStatus}
+              onAdminOverrideStatus={handleAdminOverrideStatus}
+              onResetAdminOverride={handleResetAdminOverride}
             />
 
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
@@ -840,7 +917,7 @@ export default function App() {
       </main>
 
       {/* MOBILE STICKY BOTTOM NAVIGATION BAR (Thumb-friendly on Android) */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex justify-around items-center shadow-lg">
+      <nav className="no-print sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex justify-around items-center shadow-lg">
         <button
           type="button"
           onClick={() => setActiveTab('FORM')}
@@ -1048,6 +1125,7 @@ export default function App() {
           onClose={() => setIsSavedListModalOpen(false)}
           savedItems={savedReports}
           currentReportId={report.id}
+          currentUser={currentUser}
           onLoadReport={handleLoadReport}
           onUseAsTemplate={handleUseAsTemplate}
           onRefreshSavedList={refreshSavedList}
@@ -1082,8 +1160,10 @@ export default function App() {
         )}
       </div>
 
-      {/* Official Print View (Background container when preview modal is not active) */}
-      {!isPrintPreviewOpen && <PrintReportView report={report} />}
+      {/* Official Print Mount: Always rendered for browser window.print() */}
+      <div id="print-mount" className="hidden print:block">
+        <PrintReportView report={report} />
+      </div>
     </>
   );
 }
